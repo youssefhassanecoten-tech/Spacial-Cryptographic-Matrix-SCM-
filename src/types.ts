@@ -1,0 +1,122 @@
+export const GRID_SIZE = 9;
+export const BLOCK_SIZE = 3;
+export const BLOCKS_PER_AXIS = 3;
+export const VOXEL_COUNT = GRID_SIZE ** 3;
+export const GRID_HALF = (GRID_SIZE - 1) / 2;
+
+export type Vec3 = [number, number, number];
+
+export interface SCMAnchor {
+  id: number;
+  label: string;
+  coord: Vec3;
+}
+
+export interface SCMMatrix {
+  id: string;
+  seed: number;
+  label: string;
+  createdAt: string;
+  bits: Uint8Array;
+  anchors: SCMAnchor[];
+  path: number[];
+  order: number[];
+  orderRank: Uint16Array;
+  activeCount: number;
+}
+
+export interface SCMTokenPayload {
+  v: 1;
+  id: string;
+  seed: number;
+  label: string;
+  createdAt: string;
+  anchors: Vec3[];
+}
+
+export type GeometryStyle = "classic" | "maze" | "polyhedral";
+export type MaterialType = "matte" | "metallic" | "glass" | "neon";
+export type GradientMode = "none" | "linear" | "radial";
+
+export interface DesignState {
+  geometry: GeometryStyle;
+  material: MaterialType;
+  gradient: GradientMode;
+  colorBase: string;
+  colorA: string;
+  colorB: string;
+  colorC: string;
+  roughness: number;
+  metalness: number;
+  opacity: number;
+  glow: number;
+  showGrid: boolean;
+  showAnchors: boolean;
+  showTrajectory: boolean;
+  contrastGuard: boolean;
+  autoRotate: boolean;
+}
+
+export type AnimationType =
+  | "explode"
+  | "layerWave"
+  | "pulse"
+  | "glow"
+  | "scanline";
+
+export type EasingName =
+  | "linear"
+  | "easeInQuad"
+  | "easeOutCubic"
+  | "easeInOutCubic"
+  | "sine"
+  | "backOut";
+
+export type Axis = "x" | "y" | "z";
+export type WaveMode = "slice" | "spiral";
+
+export interface AnimationLayer {
+  id: string;
+  type: AnimationType;
+  name: string;
+  enabled: boolean;
+  delay: number;
+  duration: number;
+  easing: EasingName;
+  repeat: number;
+  intensity: number;
+  axis: Axis;
+  mode: WaveMode;
+}
+
+export interface VerificationResult {
+  id: "E" | "F";
+  name: string;
+  passed: boolean;
+  detail: string;
+  metrics: Record<string, string | number>;
+  durationMs: number;
+}
+
+export interface TrajectoryPoint2D {
+  x: number;
+  y: number;
+}
+
+export interface TrajectoryResult {
+  points3D: Vec3[];
+  segments: Array<[Vec3, Vec3]>;
+  anchorPoints3D: Vec3[];
+  constellation: TrajectoryPoint2D[];
+  constellationAnchors: TrajectoryPoint2D[];
+  signature: string;
+  constellationSignature: string;
+}
+
+export interface ExportOptions {
+  includeBasePlate: boolean;
+  baseThickness: number;
+  scale: number;
+}
+
+export type StudioTab = "design" | "animate" | "export" | "verify" | "token";
