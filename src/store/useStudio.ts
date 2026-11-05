@@ -3,7 +3,9 @@ import type {
   AnimationLayer,
   AnimationType,
   DesignState,
+  PayloadKind,
   SCMMatrix,
+  SCMPayload,
   StudioTab,
 } from "../types";
 import { VOXEL_COUNT } from "../types";
@@ -12,11 +14,16 @@ import {
   defaultAnimationLayers,
 } from "../lib/animation";
 import {
+  buildPayloadContainer,
   buildShareLink,
+  bytesToBase64Url,
   decryptToken,
   describeTokenError,
+  embeddedPayloadBytes,
   encryptPayload,
+  parsePayloadContainer,
   readTokenFromLocation,
+  sha256Hex,
 } from "../lib/crypto";
 import {
   createMatrixFromSeed,
@@ -40,6 +47,11 @@ export const DEFAULT_DESIGN: DesignState = {
   geometry: "classic",
   material: "neon",
   gradient: "linear",
+  shape: "cube",
+  pattern: "none",
+  patternScale: 4,
+  patternIntensity: 0.45,
+  patternColor: "#f8fafc",
   colorBase: "#22d3ee",
   colorA: "#22d3ee",
   colorB: "#818cf8",
@@ -54,6 +66,23 @@ export const DEFAULT_DESIGN: DesignState = {
   contrastGuard: false,
   autoRotate: false,
 };
+
+export const TEXT_EMBED_LIMIT = 512;
+export const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+
+export interface PayloadInput {
+  kind: PayloadKind;
+  name: string;
+  mime: string;
+  bytes: Uint8Array;
+}
+
+export interface SealPayloadResult {
+  ok: boolean;
+  embedded: boolean;
+  container?: Blob;
+  error?: string;
+}
 
 export type ToastTone = "info" | "success" | "error";
 
@@ -75,6 +104,10 @@ export interface StudioState {
   timeRef: { current: number };
   activeTab: StudioTab;
   toast: ToastState | null;
+  payload: SCMPayload | null;
+  payloadContent: Blob | null;
+  payloadContainer: Blob | null;
+  payloadIntegrity: boolean | null;
   setDesign: (patch: Partial<DesignState>) => void;
   setLayer: (id: string, patch: Partial<AnimationLayer>) => void;
   toggleLayer: (id: string) => void;
@@ -95,6 +128,9 @@ export interface StudioState {
   loadToken: (token: string) => Promise<boolean>;
   bootstrap: () => Promise<void>;
   playAssemble: () => void;
+  sealPayload: (input: PayloadInput) => Promise<SealPayloadResult>;
+  clearPayload: () => Promise<void>;
+  loadPayloadContainer: (file: Blob) => Promise<{ ok: boolean; error?: string }>;
 }
 
 function withAssembleLayers(layers: AnimationLayer[]): AnimationLayer[] {
@@ -117,6 +153,10 @@ export const useStudio = create<StudioState>((set, get) => ({
   timeRef: { current: 0 },
   activeTab: "design",
   toast: null,
+  payload: null,
+  payloadContent: null,
+  payloadContainer: null,
+  payloadIntegrity: null,
 
   setDesign: (patch) =>
     set((state) => ({ design: { ...state.design, ...patch } })),
@@ -220,7 +260,15 @@ export const useStudio = create<StudioState>((set, get) => ({
 
   generateNewToken: async (label) => {
     const matrix = createNewMatrix(label?.trim() || "Untitled Lattice");
-    set({ matrix, tokenStatus: "syncing", tokenError: null });
+    set({
+      matrix,
+      tokenStatus: "syncing",
+      tokenError: null,
+      payload: null,
+      payloadContent: null,
+      payloadContainer: null,
+      payloadIntegrity: null,
+    });
     get().timeRef.current = 0;
     try {
       const token = await encryptPayload(matrixToPayload(matrix));
@@ -251,6 +299,13 @@ export const useStudio = create<StudioState>((set, get) => ({
     try {
       const payload = await decryptToken(trimmed);
       const matrix = matrixFromPayload(payload);
+      const embedded = payload.payload ? embeddedPayloadBytes(payload.payload) : null;
+      const payloadContent = embedded
+        ? new Blob([embedded], { type: payload.payload?.mime ?? "application/octet-stream" })
+        : null;
+      const payloadIntegrity = embedded && payload.payload
+        ? (await sha256Hex(embedded)) === payload.payload.sha256
+        : null;
       get().timeRef.current = 0;
       set({
         matrix,
@@ -259,6 +314,10 @@ export const useStudio = create<StudioState>((set, get) => ({
         tokenError: null,
         playing: true,
         layers: withAssembleLayers(get().layers),
+        payload: payload.payload ?? null,
+        payloadContent,
+        payloadContainer: null,
+        payloadIntegrity,
       });
       get().notify(`Decrypted ${matrix.label} · ${matrix.activeCount}/${VOXEL_COUNT} active voxels.`, "success");
       if (typeof window !== "undefined") {
@@ -291,5 +350,123 @@ export const useStudio = create<StudioState>((set, get) => ({
       playing: true,
       layers: withAssembleLayers(get().layers),
     });
+  },
+
+  sealPayload: async (input) => {
+    const { matrix, payload: previousPayload, payloadContent: previousContent, payloadContainer: previousContainer } = get();
+    if (input.bytes.byteLength === 0) {
+      return { ok: false, embedded: false, error: "The payload is empty." };
+    }
+    if (input.bytes.byteLength > MAX_PAYLOAD_BYTES) {
+      return {
+        ok: false,
+        embedded: false,
+        error: `Payload exceeds the ${Math.round(MAX_PAYLOAD_BYTES / (1024 * 1024))} MB limit.`,
+      };
+    }
+    try {
+      const sha256 = await sha256Hex(input.bytes);
+      const embedded = input.kind === "text" && input.bytes.byteLength <= TEXT_EMBED_LIMIT;
+      const payload: SCMPayload = {
+        kind: input.kind,
+        name: input.name,
+        mime: input.mime,
+        size: input.bytes.byteLength,
+        sha256,
+        mode: embedded ? "embedded" : "external",
+        ...(embedded ? { data: bytesToBase64Url(input.bytes) } : {}),
+      };
+      set({ tokenStatus: "syncing", tokenError: null });
+      const token = await encryptPayload(matrixToPayload(matrix, payload));
+      const container = embedded
+        ? undefined
+        : await buildPayloadContainer(token, payload, input.bytes);
+      const bytes = new Uint8Array(input.bytes);
+      set({
+        token,
+        tokenStatus: "ready",
+        tokenError: null,
+        payload,
+        payloadContent: new Blob([bytes], { type: input.mime }),
+        payloadContainer: container ?? null,
+        payloadIntegrity: true,
+      });
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", buildShareLink(token));
+      }
+      return { ok: true, embedded, container };
+    } catch (error) {
+      set({
+        tokenStatus: "error",
+        tokenError: describeTokenError(error),
+        payload: previousPayload,
+        payloadContent: previousContent,
+        payloadContainer: previousContainer,
+      });
+      return { ok: false, embedded: false, error: describeTokenError(error) };
+    }
+  },
+
+  clearPayload: async () => {
+    const { matrix } = get();
+    set({ tokenStatus: "syncing", tokenError: null });
+    try {
+      const token = await encryptPayload(matrixToPayload(matrix));
+      set({
+        token,
+        tokenStatus: "ready",
+        tokenError: null,
+        payload: null,
+        payloadContent: null,
+        payloadContainer: null,
+        payloadIntegrity: null,
+      });
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", buildShareLink(token));
+      }
+      get().notify("Encrypted payload removed from the token.", "success");
+    } catch (error) {
+      set({ tokenStatus: "error", tokenError: describeTokenError(error) });
+      get().notify("Could not clear the payload.", "error");
+    }
+  },
+
+  loadPayloadContainer: async (file) => {
+    try {
+      const parsed = await parsePayloadContainer(file);
+      const tokenPayload = await decryptToken(parsed.header.token);
+      if (!tokenPayload.payload) {
+        throw new Error("The container token does not describe a payload.");
+      }
+      if (tokenPayload.payload.sha256.toLowerCase() !== parsed.payload.sha256) {
+        throw new Error("Container metadata does not match its token.");
+      }
+      if (!parsed.sha256Ok) {
+        throw new Error("Payload integrity check failed.");
+      }
+      const matrix = matrixFromPayload(tokenPayload);
+      get().timeRef.current = 0;
+      set({
+        matrix,
+        token: parsed.header.token,
+        tokenStatus: "ready",
+        tokenError: null,
+        playing: true,
+        layers: withAssembleLayers(get().layers),
+        payload: tokenPayload.payload,
+        payloadContent: new Blob([parsed.bytes], { type: parsed.payload.mime }),
+        payloadContainer: file,
+        payloadIntegrity: true,
+      });
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", buildShareLink(parsed.header.token));
+      }
+      get().notify("Encrypted container loaded and integrity verified.", "success");
+      return { ok: true };
+    } catch (error) {
+      const message = describeTokenError(error);
+      get().notify(message, "error");
+      return { ok: false, error: message };
+    }
   },
 }));

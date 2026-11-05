@@ -1,14 +1,28 @@
 import {
   Anchor,
   ArrowDown,
+  AudioWaveform,
   Box,
+  Boxes,
   CircleDot,
+  CircleSlash2,
+  CircuitBoard,
+  Cross,
+  Cuboid,
+  Cylinder,
+  Donut,
   Droplets,
   Gem,
+  Globe,
+  Grid2X2,
   Grid3X3,
+  Hash,
   Layers,
   Lock,
+  Minus,
+  Paintbrush,
   Palette,
+  Pyramid,
   Radar,
   Rotate3D,
   Route,
@@ -17,9 +31,17 @@ import {
   Waypoints,
   Zap,
 } from "lucide-react";
-import type { GeometryStyle, MaterialType } from "../../types";
+import type { ReactNode } from "react";
+import type {
+  GeometryStyle,
+  MaterialType,
+  PatternType,
+  ShapeType,
+} from "../../types";
 import { VOXEL_COUNT } from "../../types";
 import { PALETTES } from "../../lib/palettes";
+import { PATTERN_HINTS, PATTERN_LABELS, PATTERN_TYPES } from "../../lib/patterns";
+import { SHAPE_HINTS, SHAPE_LABELS, SHAPE_TYPES } from "../../lib/shapes";
 import { anchorPhysicalCenters } from "../../lib/scm";
 import { useStudio } from "../../store/useStudio";
 import {
@@ -36,6 +58,28 @@ const GEOMETRY_HINTS: Record<GeometryStyle, string> = {
   classic: "Sharp voxel cells. Fastest to scan and the most literal matrix read.",
   maze: "Adjacent data voxels become continuous 3D pipes with joint nodes.",
   polyhedral: "Mixed prisms, pyramids, and faceted solids assigned by the PRNG.",
+};
+
+const SHAPE_ICONS: Record<ShapeType, ReactNode> = {
+  cube: <Cuboid className="h-3.5 w-3.5" />,
+  sphere: <Globe className="h-3.5 w-3.5" />,
+  diamond: <Gem className="h-3.5 w-3.5" />,
+  cylinder: <Cylinder className="h-3.5 w-3.5" />,
+  torus: <Donut className="h-3.5 w-3.5" />,
+  pyramid: <Pyramid className="h-3.5 w-3.5" />,
+  cross: <Cross className="h-3.5 w-3.5" />,
+  shell: <Boxes className="h-3.5 w-3.5" />,
+};
+
+const PATTERN_ICONS: Record<PatternType, ReactNode> = {
+  none: <CircleSlash2 className="h-3.5 w-3.5" />,
+  stripes: <Minus className="h-3.5 w-3.5" />,
+  checker: <Grid2X2 className="h-3.5 w-3.5" />,
+  dots: <CircleDot className="h-3.5 w-3.5" />,
+  grid: <Grid3X3 className="h-3.5 w-3.5" />,
+  circuit: <CircuitBoard className="h-3.5 w-3.5" />,
+  waves: <AudioWaveform className="h-3.5 w-3.5" />,
+  glyph: <Hash className="h-3.5 w-3.5" />,
 };
 
 const MATERIAL_HINTS: Record<MaterialType, string> = {
@@ -67,6 +111,28 @@ export function DesignPanel() {
             { value: "polyhedral", label: "Poly", icon: <Gem className="h-3.5 w-3.5" /> },
           ]}
         />
+      </PanelSection>
+
+      <PanelSection
+        icon={<Cuboid className="h-3.5 w-3.5" />}
+        title="Overall Shape"
+        hint={SHAPE_HINTS[design.shape]}
+        action={<Badge tone="violet">mask</Badge>}
+      >
+        <Segmented
+          value={design.shape}
+          onChange={(shape) => setDesign({ shape })}
+          options={SHAPE_TYPES.map((shape) => ({
+            value: shape,
+            label: SHAPE_LABELS[shape],
+            icon: SHAPE_ICONS[shape],
+          }))}
+          columns={4}
+        />
+        <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+          The shape mask is visual-only. Active bits, anchor centers, and execution order
+          remain locked.
+        </p>
       </PanelSection>
 
       <PanelSection
@@ -119,6 +185,55 @@ export function DesignPanel() {
             format={(value) => value.toFixed(2)}
           />
         </div>
+      </PanelSection>
+
+      <PanelSection
+        icon={<Paintbrush className="h-3.5 w-3.5" />}
+        title="Per-Block Patterns"
+        hint={PATTERN_HINTS[design.pattern]}
+        action={<Badge tone="cyan">shader ink</Badge>}
+      >
+        <Segmented
+          value={design.pattern}
+          onChange={(pattern) => setDesign({ pattern })}
+          options={PATTERN_TYPES.map((pattern) => ({
+            value: pattern,
+            label: PATTERN_LABELS[pattern],
+            icon: PATTERN_ICONS[pattern],
+          }))}
+          columns={4}
+        />
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Slider
+            label="Pattern scale"
+            value={design.patternScale}
+            min={1}
+            max={16}
+            step={0.5}
+            onChange={(patternScale) => setDesign({ patternScale })}
+            format={(value) => `${value.toFixed(1)}×`}
+          />
+          <Slider
+            label="Ink strength"
+            value={design.patternIntensity}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={(patternIntensity) => setDesign({ patternIntensity })}
+            format={(value) => `${Math.round(value * 100)}%`}
+          />
+        </div>
+        <div className="mt-2">
+          <ColorInput
+            label="Pattern ink"
+            value={design.patternColor}
+            onChange={(patternColor) => setDesign({ patternColor })}
+          />
+        </div>
+        <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+          Each block face is drawn from its own UV space and seeded instance, not from a
+          flat plane. Pattern changes never mutate the bitstream.
+        </p>
       </PanelSection>
 
       <PanelSection

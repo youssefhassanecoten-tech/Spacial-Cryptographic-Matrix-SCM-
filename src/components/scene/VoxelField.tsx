@@ -24,6 +24,7 @@ import {
   indexToCoord,
   voxelIndex,
 } from "../../lib/scm";
+import { shapeMask } from "../../lib/shapes";
 import { useVoxelMaterial } from "./useVoxelMaterial";
 
 export interface ActiveVoxel {
@@ -35,6 +36,8 @@ export interface ActiveVoxel {
   base: Vec3;
   variant: number;
   contrast: number;
+  shapeMask: number;
+  seed: number;
 }
 
 interface GeometrySet {
@@ -100,6 +103,18 @@ function VoxelGroup({
     [],
   );
 
+  const instanceGeometry = useMemo(() => {
+    const clone = geometry.clone();
+    const seeds = new Float32Array(voxels.length);
+    for (let i = 0; i < voxels.length; i += 1) {
+      seeds[i] = voxels[i].seed;
+    }
+    clone.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seeds, 1));
+    return clone;
+  }, [geometry, voxels]);
+
+  useEffect(() => () => instanceGeometry.dispose(), [instanceGeometry]);
+
   const baseColors = useMemo(
     () => voxels.map((voxel) => baseColorFor(voxel, design)),
     [voxels, design],
@@ -134,7 +149,9 @@ function VoxelGroup({
         voxel.base[1] + anim.offsetY,
         voxel.base[2] + anim.offsetZ,
       );
-      scale.setScalar(Math.max(0.0001, anim.scale * baseScale));
+      scale.setScalar(
+        Math.max(0.0001, anim.scale * baseScale * voxel.shapeMask),
+      );
       scratchMatrix.compose(position, baseQuaternions[i], scale);
       mesh.setMatrixAt(i, scratchMatrix);
       color.copy(baseColors[i]).multiplyScalar(Math.min(2.4, anim.glow));
@@ -168,7 +185,7 @@ function VoxelGroup({
   return (
     <instancedMesh
       ref={meshRef}
-      args={[geometry, material, voxels.length]}
+      args={[instanceGeometry, material, voxels.length]}
       castShadow
       receiveShadow
       frustumCulled={false}
@@ -181,6 +198,7 @@ interface PipeConnection {
   b: number;
   colorSeed: Vec3;
   contrast: number;
+  seed: number;
 }
 
 function PipeField({
@@ -229,11 +247,24 @@ function PipeField({
           b: neighbor,
           colorSeed: midpoint,
           contrast: (voxelA.contrast + voxelB.contrast) / 2,
+          seed: (voxelA.seed + voxelB.seed) / 2,
         });
       }
     }
     return list;
   }, [matrix, voxelByIndex]);
+
+  const instanceGeometry = useMemo(() => {
+    const clone = geometry.clone();
+    const seeds = new Float32Array(connections.length);
+    for (let i = 0; i < connections.length; i += 1) {
+      seeds[i] = connections[i].seed;
+    }
+    clone.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seeds, 1));
+    return clone;
+  }, [geometry, connections]);
+
+  useEffect(() => () => instanceGeometry.dispose(), [instanceGeometry]);
 
   const baseColors = useMemo(
     () =>
@@ -304,7 +335,10 @@ function PipeField({
       mid.copy(start).add(end).multiplyScalar(0.5);
       direction.copy(end).sub(start);
       const length = direction.length();
-      const visibility = Math.min(animA.scale, animB.scale);
+      const visibility = Math.min(
+        animA.scale * voxelA.shapeMask,
+        animB.scale * voxelB.shapeMask,
+      );
       if (length < 1e-4 || visibility < 0.06) {
         scale.set(0, 0, 0);
       } else {
@@ -351,7 +385,7 @@ function PipeField({
   return (
     <instancedMesh
       ref={meshRef}
-      args={[geometry, material, connections.length]}
+      args={[instanceGeometry, material, connections.length]}
       castShadow
       receiveShadow
       frustumCulled={false}
@@ -370,8 +404,12 @@ export function VoxelField({
   layers: AnimationLayer[];
   timeRef: { current: number };
 }) {
-  const { material } = useVoxelMaterial(design);
+  const { material, uniforms } = useVoxelMaterial(design);
   const geometries = useMemo(() => buildGeometries(), []);
+
+  useFrame(() => {
+    uniforms.uTime.value = timeRef.current;
+  });
 
   useEffect(
     () => () => {
@@ -393,6 +431,7 @@ export function VoxelField({
         continue;
       }
       const coord = indexToCoord(index);
+      const seed = hashCell(matrix.seed, coord[0], coord[1], coord[2]);
       voxels.push({
         index,
         x: coord[0],
@@ -404,14 +443,14 @@ export function VoxelField({
           coord[1] - GRID_HALF,
           coord[2] - GRID_HALF,
         ],
-        variant:
-          hashCell(matrix.seed, coord[0], coord[1], coord[2]) %
-          geometries.variants.length,
+        variant: seed % geometries.variants.length,
         contrast: scores[index],
+        shapeMask: shapeMask(design.shape, coord),
+        seed: seed / 0xffffffff,
       });
     }
     return voxels;
-  }, [matrix, geometries.variants.length]);
+  }, [matrix, geometries.variants.length, design.shape]);
 
   const voxelByIndex = useMemo(
     () => new Map(activeVoxels.map((voxel) => [voxel.index, voxel])),

@@ -64,6 +64,7 @@ export function ExportPanel() {
   const matrix = useStudio((state) => state.matrix);
   const design = useStudio((state) => state.design);
   const token = useStudio((state) => state.token);
+  const payload = useStudio((state) => state.payload);
   const notify = useStudio((state) => state.notify);
   const [modelOptions, setModelOptions] = useState<ExportOptions>({
     includeBasePlate: true,
@@ -394,6 +395,19 @@ export function ExportPanel() {
         <p className="mt-2 break-all rounded-md border border-white/[0.05] bg-black/25 p-2 font-mono text-[8px] leading-relaxed text-slate-500">
           {link || "Token not sealed yet."}
         </p>
+        {payload?.mode === "external" ? (
+          <p className="mt-2 rounded-md border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[9px] leading-relaxed text-amber-200/80">
+            This token references an external encrypted payload. Share the generated{" "}
+            <span className="font-mono">.scm</span> container alongside the QR code so
+            the recipient can decrypt the content.
+          </p>
+        ) : null}
+        {token.length > 1800 ? (
+          <p className="mt-2 rounded-md border border-rose-400/20 bg-rose-400/[0.06] p-2 text-[9px] leading-relaxed text-rose-200/80">
+            This token is very dense ({token.length} chars). If a scanner struggles,
+            share the SCM1 token or the .scm container directly.
+          </p>
+        ) : null}
         {cardUrl ? (
           <div className="mt-2 overflow-hidden rounded-lg border border-white/[0.08] bg-black/30">
             <img src={cardUrl} alt="SCM digital card preview" className="block w-full" />

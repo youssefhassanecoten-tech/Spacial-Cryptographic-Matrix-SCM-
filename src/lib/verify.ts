@@ -8,6 +8,8 @@ import type {
 import { VOXEL_COUNT } from "../types";
 import { useStudio } from "../store/useStudio";
 import { decryptToken } from "./crypto";
+import { PATTERN_TYPES } from "./patterns";
+import { SHAPE_TYPES } from "./shapes";
 import {
   alignmentSignature,
   anchorCenterSignature,
@@ -105,6 +107,43 @@ export async function runTestE(): Promise<VerificationResult> {
       }
       if (mismatch) break;
     }
+
+    if (!mismatch) {
+      for (const shape of SHAPE_TYPES) {
+        useStudio.getState().setDesign({
+          ...designBefore,
+          shape,
+          pattern: "none",
+          contrastGuard: false,
+        });
+        tested += 1;
+        const after = snapshotMatrix();
+        if (!snapshotsMatch(before, after)) {
+          mismatch = `Shape ${shape}: ${describeMismatch(before, after)}`;
+          break;
+        }
+      }
+    }
+
+    if (!mismatch) {
+      for (const pattern of PATTERN_TYPES) {
+        useStudio.getState().setDesign({
+          ...designBefore,
+          shape: "cube",
+          pattern,
+          patternScale: 6,
+          patternIntensity: 0.8,
+          patternColor: "#f97316",
+          contrastGuard: false,
+        });
+        tested += 1;
+        const after = snapshotMatrix();
+        if (!snapshotsMatch(before, after)) {
+          mismatch = `Pattern ${pattern}: ${describeMismatch(before, after)}`;
+          break;
+        }
+      }
+    }
   } finally {
     useStudio.getState().setDesign(designBefore);
   }
@@ -116,7 +155,7 @@ export async function runTestE(): Promise<VerificationResult> {
     name: "Studio Customization Interoperability",
     passed,
     detail: passed
-      ? `${tested} render variants (geometry × material × roughness) left the bitstream, alignment path, execution order, and anchor centers untouched.`
+      ? `${tested} render variants (geometry, materials, roughness, overall shapes, and per-block patterns) left the bitstream, alignment path, execution order, and anchor centers untouched.`
       : mismatch,
     metrics: {
       "variants tested": tested,

@@ -376,13 +376,14 @@ export function StatRow({
 }: {
   label: string;
   value: ReactNode;
-  tone?: "cyan" | "rose" | "emerald" | "violet" | "slate";
+  tone?: "cyan" | "rose" | "emerald" | "violet" | "amber" | "slate";
 }) {
   const colors = {
     cyan: "text-cyan-300",
     rose: "text-rose-300",
     emerald: "text-emerald-300",
     violet: "text-violet-300",
+    amber: "text-amber-300",
     slate: "text-slate-300",
   };
   return (

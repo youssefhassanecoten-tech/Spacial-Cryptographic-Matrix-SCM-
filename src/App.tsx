@@ -8,7 +8,14 @@ import { PlaybackBar } from "./components/PlaybackBar";
 import { Toasts } from "./components/Toasts";
 import { Scene } from "./components/scene/Scene";
 
-const SHORTCUT_TABS: StudioTab[] = ["design", "animate", "export", "verify", "token"];
+const SHORTCUT_TABS: StudioTab[] = [
+  "design",
+  "payload",
+  "animate",
+  "export",
+  "verify",
+  "token",
+];
 
 let bootstrapped = false;
 
@@ -47,7 +54,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-[#05070d] text-slate-100">
+    <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-[#05070d] pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] text-slate-100">
       <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.08),transparent_38%),radial-gradient(circle_at_82%_8%,rgba(167,139,250,0.08),transparent_34%),radial-gradient(circle_at_50%_100%,rgba(251,113,133,0.05),transparent_40%)]" />
       <Header />
       <main className="relative z-10 flex min-h-0 flex-1 flex-col lg:flex-row">

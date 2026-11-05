@@ -35,6 +35,7 @@ export function TokenPanel() {
   const token = useStudio((state) => state.token);
   const tokenStatus = useStudio((state) => state.tokenStatus);
   const tokenError = useStudio((state) => state.tokenError);
+  const payload = useStudio((state) => state.payload);
   const loadToken = useStudio((state) => state.loadToken);
   const generateNewToken = useStudio((state) => state.generateNewToken);
   const notify = useStudio((state) => state.notify);
@@ -100,6 +101,15 @@ export function TokenPanel() {
             value={matrix.anchors.map((anchor) => `[${anchor.coord.join(",")}]`).join(" ")}
           />
           <StatRow label="active" value={`${matrix.activeCount} / ${VOXEL_COUNT}`} />
+          <StatRow
+            label="payload"
+            value={
+              payload
+                ? `${payload.kind} · ${payload.mode} · ${(payload.size / 1024).toFixed(1)} KB`
+                : "none"
+            }
+            tone={payload ? "violet" : "slate"}
+          />
           <StatRow label="token" value={`${token.length} chars`} />
           <StatRow label="fingerprint" value={fingerprint} tone="emerald" />
         </div>

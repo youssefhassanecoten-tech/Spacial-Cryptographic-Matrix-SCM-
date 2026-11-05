@@ -25,6 +25,19 @@ export interface SCMMatrix {
   activeCount: number;
 }
 
+export type PayloadKind = "text" | "image" | "video" | "document";
+export type PayloadMode = "embedded" | "external";
+
+export interface SCMPayload {
+  kind: PayloadKind;
+  name: string;
+  mime: string;
+  size: number;
+  sha256: string;
+  mode: PayloadMode;
+  data?: string;
+}
+
 export interface SCMTokenPayload {
   v: 1;
   id: string;
@@ -32,7 +45,28 @@ export interface SCMTokenPayload {
   label: string;
   createdAt: string;
   anchors: Vec3[];
+  payload?: SCMPayload;
 }
+
+export type ShapeType =
+  | "cube"
+  | "sphere"
+  | "diamond"
+  | "cylinder"
+  | "torus"
+  | "pyramid"
+  | "cross"
+  | "shell";
+
+export type PatternType =
+  | "none"
+  | "stripes"
+  | "checker"
+  | "dots"
+  | "grid"
+  | "circuit"
+  | "waves"
+  | "glyph";
 
 export type GeometryStyle = "classic" | "maze" | "polyhedral";
 export type MaterialType = "matte" | "metallic" | "glass" | "neon";
@@ -42,6 +76,11 @@ export interface DesignState {
   geometry: GeometryStyle;
   material: MaterialType;
   gradient: GradientMode;
+  shape: ShapeType;
+  pattern: PatternType;
+  patternScale: number;
+  patternIntensity: number;
+  patternColor: string;
   colorBase: string;
   colorA: string;
   colorB: string;
@@ -119,4 +158,10 @@ export interface ExportOptions {
   scale: number;
 }
 
-export type StudioTab = "design" | "animate" | "export" | "verify" | "token";
+export type StudioTab =
+  | "design"
+  | "payload"
+  | "animate"
+  | "export"
+  | "verify"
+  | "token";

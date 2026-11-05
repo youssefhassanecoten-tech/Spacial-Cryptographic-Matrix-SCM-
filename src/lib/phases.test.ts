@@ -1,8 +1,16 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import type { SCMMatrix } from "../types";
+import type { SCMMatrix, SCMPayload } from "../types";
 import { useStudio, DEFAULT_DESIGN } from "../store/useStudio";
 import { computeVoxelAnimation } from "./animation";
-import { decryptToken, encryptPayload } from "./crypto";
+import {
+  buildPayloadContainer,
+  bytesToBase64Url,
+  decryptToken,
+  embeddedPayloadBytes,
+  encryptPayload,
+  parsePayloadContainer,
+  sha256Hex,
+} from "./crypto";
 import {
   bitstreamSignature,
   createMatrixFromSeed,
@@ -82,6 +90,53 @@ describe("Phase 1-2 cryptographic matrix core", () => {
   });
 });
 
+describe("Phase 4 payload encryption", () => {
+  it("embeds and decrypts small text inside the SCM1 token", async () => {
+    const bytes = new TextEncoder().encode("recovery phrase: amber vector nine");
+    const sha256 = await sha256Hex(bytes);
+    const payload: SCMPayload = {
+      kind: "text",
+      name: "message.txt",
+      mime: "text/plain",
+      size: bytes.byteLength,
+      sha256,
+      mode: "embedded",
+      data: bytesToBase64Url(bytes),
+    };
+    const textToken = await encryptPayload(matrixToPayload(matrix, payload));
+    const decoded = await decryptToken(textToken);
+    expect(decoded.payload?.mode).toBe("embedded");
+    expect(decoded.payload?.sha256).toBe(sha256);
+    const embedded = embeddedPayloadBytes(decoded.payload ?? null);
+    expect(embedded).not.toBeNull();
+    expect(new TextDecoder().decode(embedded ?? new Uint8Array())).toBe(
+      "recovery phrase: amber vector nine",
+    );
+  });
+
+  it("builds and verifies an encrypted .scm container", async () => {
+    const bytes = new TextEncoder().encode("external file payload");
+    const sha256 = await sha256Hex(bytes);
+    const payload: SCMPayload = {
+      kind: "document",
+      name: "evidence.bin",
+      mime: "application/octet-stream",
+      size: bytes.byteLength,
+      sha256,
+      mode: "external",
+    };
+    const externalToken = await encryptPayload(matrixToPayload(matrix, payload));
+    const container = await buildPayloadContainer(externalToken, payload, bytes);
+    const parsed = await parsePayloadContainer(container);
+    expect(parsed.sha256Ok).toBe(true);
+    expect(parsed.header.token).toBe(externalToken);
+    expect(parsed.payload.mode).toBe("external");
+    expect(new TextDecoder().decode(parsed.bytes)).toBe("external file payload");
+    const decoded = await decryptToken(parsed.header.token);
+    expect(decoded.payload?.sha256).toBe(sha256);
+  });
+});
+
 describe("Phase 4 visual engine", () => {
   it("resolves pulse, glow, scanline, and reveal animation without touching bits", () => {
     const scratch = { offsetX: 0, offsetY: 0, offsetZ: 0, scale: 1, glow: 1 };
@@ -127,7 +182,7 @@ describe("Phase 4 visual engine", () => {
   it("passes Test E: customization interoperability", async () => {
     const result = await runTestE();
     expect(result.passed).toBe(true);
-    expect(result.metrics["variants tested"]).toBe(36);
+    expect(result.metrics["variants tested"]).toBe(52);
     expect(useStudio.getState().matrix).toBe(matrix);
   });
 

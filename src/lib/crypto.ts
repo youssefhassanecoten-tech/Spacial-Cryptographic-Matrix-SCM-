@@ -1,7 +1,13 @@
-import type { SCMTokenPayload } from "../types";
+import type {
+  PayloadKind,
+  SCMPayload,
+  SCMTokenPayload,
+} from "../types";
 import { stableHash } from "./scm";
 
 const TOKEN_PREFIX = "SCM1";
+const CONTAINER_PREFIX = "SCMC1";
+const PAYLOAD_KINDS: PayloadKind[] = ["text", "image", "video", "document"];
 const KEY_MATERIAL = "scm-studio::duo-system::v1::local-first-matrix::aes-gcm";
 
 interface TokenEnvelope {
@@ -10,7 +16,7 @@ interface TokenEnvelope {
   c: string;
 }
 
-function bytesToBase64Url(bytes: Uint8Array): string {
+export function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
@@ -19,7 +25,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
+export function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/");
   const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, "="));
   const bytes = new Uint8Array(binary.length);
@@ -63,6 +69,49 @@ export async function encryptPayload(payload: SCMTokenPayload): Promise<string> 
   return `${TOKEN_PREFIX}.${bytesToBase64Url(encoder.encode(JSON.stringify(envelope)))}`;
 }
 
+function validateContent(value: unknown): SCMPayload | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "object") {
+    throw new Error("Token content metadata is malformed.");
+  }
+  const content = value as Partial<SCMPayload>;
+  if (!content.kind || !PAYLOAD_KINDS.includes(content.kind)) {
+    throw new Error("Token content has an unsupported data kind.");
+  }
+  if (typeof content.name !== "string" || content.name.length === 0 || content.name.length > 160) {
+    throw new Error("Token content is missing a valid file name.");
+  }
+  if (typeof content.mime !== "string" || content.mime.length > 120) {
+    throw new Error("Token content is missing a valid MIME type.");
+  }
+  if (typeof content.size !== "number" || content.size < 0) {
+    throw new Error("Token content size is invalid.");
+  }
+  if (typeof content.sha256 !== "string" || !/^[0-9a-f]{64}$/i.test(content.sha256)) {
+    throw new Error("Token content is missing an integrity hash.");
+  }
+  if (content.mode !== "embedded" && content.mode !== "external") {
+    throw new Error("Token content mode is invalid.");
+  }
+  if (content.mode === "embedded" && typeof content.data !== "string") {
+    throw new Error("Embedded token content is missing its payload.");
+  }
+  if (content.mode === "external" && content.data) {
+    throw new Error("External token content cannot include inline data.");
+  }
+  return {
+    kind: content.kind,
+    name: content.name,
+    mime: content.mime,
+    size: content.size,
+    sha256: content.sha256.toLowerCase(),
+    mode: content.mode,
+    ...(content.data ? { data: content.data } : {}),
+  };
+}
+
 function validatePayload(value: unknown): SCMTokenPayload {
   if (!value || typeof value !== "object") {
     throw new Error("Token payload is empty.");
@@ -100,7 +149,147 @@ function validatePayload(value: unknown): SCMTokenPayload {
     createdAt:
       typeof payload.createdAt === "string" ? payload.createdAt : new Date(0).toISOString(),
     anchors: payload.anchors.map((anchor) => [anchor[0], anchor[1], anchor[2]]),
+    ...(payload.payload ? { payload: validateContent(payload.payload) } : {}),
   };
+}
+
+export async function sha256Hex(input: ArrayBuffer | Uint8Array): Promise<string> {
+  const bytes = input instanceof Uint8Array ? new Uint8Array(input) : new Uint8Array(input);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+export async function encryptBytes(
+  input: Uint8Array,
+): Promise<{ iv: string; cipher: Uint8Array<ArrayBuffer> }> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await getKey();
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new Uint8Array(input),
+  );
+  return { iv: bytesToBase64Url(iv), cipher: new Uint8Array(cipher) };
+}
+
+export async function decryptBytes(
+  input: Uint8Array,
+  iv: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const key = await getKey();
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64UrlToBytes(iv) },
+    key,
+    new Uint8Array(input),
+  );
+  return new Uint8Array(plain);
+}
+
+interface ContainerHeader {
+  v: 1;
+  token: string;
+  iv: string;
+  kind: PayloadKind;
+  name: string;
+  mime: string;
+  size: number;
+  sha256: string;
+}
+
+export interface ParsedPayloadContainer {
+  header: ContainerHeader;
+  payload: SCMPayload;
+  bytes: Uint8Array<ArrayBuffer>;
+  sha256Ok: boolean;
+}
+
+export async function buildPayloadContainer(
+  token: string,
+  payload: SCMPayload,
+  bytes: Uint8Array,
+): Promise<Blob> {
+  const { iv, cipher } = await encryptBytes(bytes);
+  const header: ContainerHeader = {
+    v: 1,
+    token,
+    iv,
+    kind: payload.kind,
+    name: payload.name,
+    mime: payload.mime,
+    size: payload.size,
+    sha256: payload.sha256,
+  };
+  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+  const prefixBytes = new TextEncoder().encode(CONTAINER_PREFIX);
+  const output = new Uint8Array(9 + headerBytes.length + cipher.length);
+  output.set(prefixBytes, 0);
+  new DataView(output.buffer).setUint32(5, headerBytes.length, true);
+  output.set(headerBytes, 9);
+  output.set(cipher, 9 + headerBytes.length);
+  return new Blob([output], { type: "application/x-scm-container" });
+}
+
+export async function parsePayloadContainer(
+  input: Blob | ArrayBuffer,
+): Promise<ParsedPayloadContainer> {
+  const buffer = input instanceof Blob ? await input.arrayBuffer() : input;
+  const raw = new Uint8Array(buffer);
+  if (raw.length < 9) {
+    throw new Error("SCM container is too small to be valid.");
+  }
+  const prefix = new TextDecoder().decode(raw.subarray(0, 5));
+  if (prefix !== CONTAINER_PREFIX) {
+    throw new Error("This is not an SCMC1 encrypted payload container.");
+  }
+  const headerLength = new DataView(raw.buffer).getUint32(5, true);
+  if (headerLength <= 0 || 9 + headerLength > raw.length) {
+    throw new Error("SCM container header is corrupt.");
+  }
+  let header: ContainerHeader;
+  try {
+    header = JSON.parse(
+      new TextDecoder().decode(raw.subarray(9, 9 + headerLength)),
+    ) as ContainerHeader;
+  } catch {
+    throw new Error("SCM container header is not valid JSON.");
+  }
+  if (
+    header.v !== 1 ||
+    typeof header.token !== "string" ||
+    typeof header.iv !== "string" ||
+    typeof header.name !== "string" ||
+    typeof header.mime !== "string" ||
+    typeof header.size !== "number" ||
+    typeof header.sha256 !== "string" ||
+    !PAYLOAD_KINDS.includes(header.kind)
+  ) {
+    throw new Error("SCM container header is missing required fields.");
+  }
+  const cipher = raw.slice(9 + headerLength);
+  const plain = await decryptBytes(cipher, header.iv);
+  const actualHash = await sha256Hex(plain);
+  return {
+    header,
+    payload: {
+      kind: header.kind,
+      name: header.name,
+      mime: header.mime,
+      size: header.size,
+      sha256: header.sha256.toLowerCase(),
+      mode: "external",
+    },
+    bytes: plain,
+    sha256Ok: actualHash === header.sha256.toLowerCase(),
+  };
+}
+
+export function embeddedPayloadBytes(payload: SCMPayload | null): Uint8Array<ArrayBuffer> | null {
+  if (!payload || payload.mode !== "embedded" || !payload.data) {
+    return null;
+  }
+  return base64UrlToBytes(payload.data);
 }
 
 export async function decryptToken(token: string): Promise<SCMTokenPayload> {
@@ -144,6 +333,10 @@ export function tokenFingerprint(token: string): string {
 }
 
 export function getAppBaseUrl(): string {
+  const configured = import.meta.env.VITE_PUBLIC_APP_URL;
+  if (typeof configured === "string" && configured.length > 0) {
+    return configured;
+  }
   if (typeof window !== "undefined" && window.location) {
     const { origin, pathname } = window.location;
     return `${origin}${pathname}`;

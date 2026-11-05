@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   Activity,
   Download,
+  FileLock,
   FlaskConical,
   KeyRound,
   Palette,
@@ -12,12 +13,14 @@ import { useStudio } from "../store/useStudio";
 import { AnimatePanel } from "./panels/AnimatePanel";
 import { DesignPanel } from "./panels/DesignPanel";
 import { ExportPanel } from "./panels/ExportPanel";
+import { PayloadPanel } from "./panels/PayloadPanel";
 import { TokenPanel } from "./panels/TokenPanel";
 import { VerifyPanel } from "./panels/VerifyPanel";
 import { Badge } from "./ui";
 
 const TABS: Array<{ id: StudioTab; label: string; icon: ReactNode }> = [
   { id: "design", label: "Design", icon: <Palette className="h-3.5 w-3.5" /> },
+  { id: "payload", label: "Payload", icon: <FileLock className="h-3.5 w-3.5" /> },
   { id: "animate", label: "Animate", icon: <Activity className="h-3.5 w-3.5" /> },
   { id: "export", label: "Export", icon: <Download className="h-3.5 w-3.5" /> },
   { id: "verify", label: "Verify", icon: <FlaskConical className="h-3.5 w-3.5" /> },
@@ -28,6 +31,8 @@ function TabContent({ tab }: { tab: StudioTab }) {
   switch (tab) {
     case "design":
       return <DesignPanel />;
+    case "payload":
+      return <PayloadPanel />;
     case "animate":
       return <AnimatePanel />;
     case "export":
@@ -48,6 +53,7 @@ export function StudioPanel() {
   const tokenStatus = useStudio((state) => state.tokenStatus);
   const design = useStudio((state) => state.design);
   const layers = useStudio((state) => state.layers);
+  const payload = useStudio((state) => state.payload);
   const enabledLayers = layers.filter((layer) => layer.enabled).length;
 
   return (
@@ -67,22 +73,27 @@ export function StudioPanel() {
               {matrix.id} · {matrix.activeCount}/{VOXEL_COUNT} active · {enabledLayers} layers
             </p>
           </div>
-          <Badge
-            tone={
-              tokenStatus === "ready"
-                ? "emerald"
-                : tokenStatus === "syncing"
-                  ? "amber"
-                  : "rose"
-            }
-          >
-            {tokenStatus === "ready" ? "sealed" : tokenStatus}
-          </Badge>
+          <div className="flex flex-col items-end gap-1">
+            <Badge
+              tone={
+                tokenStatus === "ready"
+                  ? "emerald"
+                  : tokenStatus === "syncing"
+                    ? "amber"
+                    : "rose"
+              }
+            >
+              {tokenStatus === "ready" ? "sealed" : tokenStatus}
+            </Badge>
+            {payload ? (
+              <Badge tone="violet">{payload.kind}</Badge>
+            ) : null}
+          </div>
         </div>
       </div>
 
       <div className="border-b border-white/[0.06] p-1.5">
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-6 gap-1">
           {TABS.map((tab) => {
             const active = tab.id === activeTab;
             return (
