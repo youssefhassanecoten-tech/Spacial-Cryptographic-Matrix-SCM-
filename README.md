@@ -105,11 +105,21 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Output: `release-electron/SCM-Studio-Portable-1.2.1.exe`
+Outputs: `release-electron/SCM-Studio-Setup-1.3.0.exe`, `release-electron/SCM-Studio-Portable-1.3.0.exe`, `latest.yml`, and the blockmap.
 
-Local copy: `release/SCM-Studio-Portable-1.2.1.exe`.
+Local copies live in `release/`. The NSIS installer supports automatic minor updates through `electron-updater`. The portable executable is unsigned, so Windows SmartScreen may warn on first launch, and portable builds do not self-update. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 
-The portable Windows executable is unsigned, so Windows SmartScreen may warn on first launch. The app loads through a secure `scm://` protocol with Web Crypto enabled.
+## Updates
+
+`public/update.json` is the remote manifest. It is fetched from the `main` branch on `raw.githubusercontent.com`, so publishing a new version only requires updating that file and pushing it.
+
+- Web/PWA: minor updates reload automatically; major versions show a confirmation dialog.
+- Android: one-tap prompt to download the new APK, followed by Android's install confirmation.
+- iOS: prompts and opens the release page; self-updating is not permitted outside the App Store.
+- Windows NSIS: minor updates download silently and install on quit; major versions open the release page.
+- Windows portable: manual downloads only.
+
+Bump `version` in `package.json`, `public/update.json`, and `android/app/build.gradle` (`versionCode` and `versionName`) for every release.
 
 ## Android
 

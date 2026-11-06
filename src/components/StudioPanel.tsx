@@ -18,6 +18,7 @@ import { PayloadPanel } from "./panels/PayloadPanel";
 import { TokenPanel } from "./panels/TokenPanel";
 import { VerifyPanel } from "./panels/VerifyPanel";
 import { Badge } from "./ui";
+import { APP_VERSION } from "../lib/updates";
 
 const TABS: Array<{ id: StudioTab; label: string; icon: ReactNode }> = [
   { id: "design", label: "Design", icon: <Palette className="h-3.5 w-3.5" /> },
@@ -135,7 +136,7 @@ export function StudioPanel() {
       <div className="border-t border-white/[0.06] px-3 py-1.5">
         <div className="flex items-center justify-between font-mono text-[8px] uppercase tracking-wider text-slate-600">
           <span>{design.geometry} · {design.material} · {design.gradient}</span>
-          <span>local-first</span>
+          <span>v{APP_VERSION} · local-first</span>
         </div>
       </div>
     </div>

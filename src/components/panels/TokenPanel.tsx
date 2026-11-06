@@ -18,6 +18,7 @@ import { downloadBlob, downloadText, safeFilename } from "../../lib/download";
 import { buildGuestLink } from "../../lib/vault";
 import { useStudio } from "../../store/useStudio";
 import { Badge, Button, PanelSection, StatRow } from "../ui";
+import { useUpdates } from "../../store/useUpdates";
 
 export function TokenPanel() {
   const matrix = useStudio((state) => state.matrix);
@@ -31,6 +32,12 @@ export function TokenPanel() {
   const newSCM = useStudio((state) => state.newSCM);
   const setTab = useStudio((state) => state.setTab);
   const notify = useStudio((state) => state.notify);
+  const currentVersion = useUpdates((state) => state.currentVersion);
+  const manifest = useUpdates((state) => state.manifest);
+  const kind = useUpdates((state) => state.kind);
+  const checking = useUpdates((state) => state.checking);
+  const error = useUpdates((state) => state.error);
+  const check = useUpdates((state) => state.check);
 
   const guestLink = shapeToken ? buildGuestLink(shapeToken) : "";
   const fingerprint = token ? tokenFingerprint(token) : "—";
@@ -231,6 +238,48 @@ export function TokenPanel() {
           <Plus className="h-3 w-3" />
           Start new SCM
         </Button>
+      </PanelSection>
+
+      <PanelSection
+        icon={<RefreshCw className="h-3.5 w-3.5" />}
+        title="App Update"
+        hint="Web applies minor updates automatically. Windows, Android, and iOS prompt before installing."
+        action={
+          <Badge
+            tone={
+              checking
+                ? "amber"
+                : kind === "major"
+                  ? "violet"
+                  : kind === "minor"
+                    ? "cyan"
+                    : "slate"
+            }
+          >
+            {checking ? "checking" : kind}
+          </Badge>
+        }
+      >
+        <StatRow label="Current version" value={`v${currentVersion}`} />
+        <StatRow
+          label="Latest version"
+          value={manifest ? `v${manifest.version}` : "not checked"}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-2 w-full"
+          disabled={checking}
+          onClick={() => void check()}
+        >
+          <RefreshCw className={`h-3 w-3 ${checking ? "animate-spin" : ""}`} />
+          {checking ? "Checking for updates" : "Check for updates"}
+        </Button>
+        {error && (
+          <p className="mt-2 text-[9px] leading-relaxed text-amber-300/80">
+            {error}
+          </p>
+        )}
       </PanelSection>
 
       <PanelSection
