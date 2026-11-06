@@ -1,10 +1,22 @@
-export const GRID_SIZE = 9;
+export const DEFAULT_GRID_SIZE = 9;
+export const MIN_GRID_SIZE = 3;
+export const MAX_GRID_SIZE = 21;
+export const GRID_SIZE_OPTIONS = [3, 6, 9, 12, 15, 18, 21] as const;
+export const GRID_SIZE = DEFAULT_GRID_SIZE;
 export const BLOCK_SIZE = 3;
-export const BLOCKS_PER_AXIS = 3;
-export const VOXEL_COUNT = GRID_SIZE ** 3;
-export const GRID_HALF = (GRID_SIZE - 1) / 2;
+export const VOXEL_COUNT = DEFAULT_GRID_SIZE ** 3;
+export const GRID_HALF = (DEFAULT_GRID_SIZE - 1) / 2;
 
 export type Vec3 = [number, number, number];
+export type GridSizeOption =
+  | "auto"
+  | "3"
+  | "6"
+  | "9"
+  | "12"
+  | "15"
+  | "18"
+  | "21";
 
 export interface SCMAnchor {
   id: number;
@@ -17,6 +29,8 @@ export interface SCMMatrix {
   seed: number;
   label: string;
   createdAt: string;
+  gridSize: number;
+  voxelCount: number;
   bits: Uint8Array;
   anchors: SCMAnchor[];
   path: number[];
@@ -67,6 +81,7 @@ export interface SCMShapePayload {
   seed: number;
   label: string;
   createdAt: string;
+  gridSize: number;
   anchors: Vec3[];
   shapeId: string;
 }
@@ -88,6 +103,7 @@ export interface SCMTokenPayload {
   seed: number;
   label: string;
   createdAt: string;
+  gridSize?: number;
   anchors: Vec3[];
   shapeId?: string;
   salt?: string;
@@ -142,6 +158,7 @@ export interface DesignState {
   showTrajectory: boolean;
   contrastGuard: boolean;
   autoRotate: boolean;
+  faceCodeMode: "auto" | "off" | "all";
 }
 
 export type AnimationType =

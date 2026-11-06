@@ -8,7 +8,7 @@ import type {
   SCMMatrix,
   Vec3,
 } from "../../types";
-import { GRID_HALF, VOXEL_COUNT } from "../../types";
+
 import {
   computeVoxelAnimation,
   type VoxelAnimation,
@@ -21,11 +21,14 @@ import {
 import { hashCell } from "../../lib/rng";
 import {
   contrastScores,
+  coordToWorld,
   indexToCoord,
   voxelIndex,
+  worldSpacing,
 } from "../../lib/scm";
 import { shapeMask } from "../../lib/shapes";
 import { useStudio } from "../../store/useStudio";
+import { FaceCodes } from "./FaceCodes";
 import { useVoxelMaterial } from "./useVoxelMaterial";
 
 export interface ActiveVoxel {
@@ -74,12 +77,16 @@ interface VoxelGroupProps {
   baseScale: number;
 }
 
-function baseColorFor(voxel: ActiveVoxel, design: DesignState): THREE.Color {
+function baseColorFor(
+  voxel: ActiveVoxel,
+  design: DesignState,
+  gridSize: number,
+): THREE.Color {
   if (design.contrastGuard) {
     const rgb = sampleContrastRgb(voxel.contrast);
     return new THREE.Color(rgbToHex(rgb));
   }
-  return new THREE.Color(sampleGradient(design, voxel.coord));
+  return new THREE.Color(sampleGradient(design, voxel.coord, gridSize));
 }
 
 function VoxelGroup({
@@ -117,8 +124,8 @@ function VoxelGroup({
   useEffect(() => () => instanceGeometry.dispose(), [instanceGeometry]);
 
   const baseColors = useMemo(
-    () => voxels.map((voxel) => baseColorFor(voxel, design)),
-    [voxels, design],
+    () => voxels.map((voxel) => baseColorFor(voxel, design, matrix.gridSize)),
+    [voxels, design, matrix.gridSize],
   );
 
   const baseQuaternions = useMemo(() => {
@@ -222,20 +229,30 @@ function PipeField({
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const connections = useMemo(() => {
     const list: PipeConnection[] = [];
-    for (let index = 0; index < VOXEL_COUNT; index += 1) {
+    const gridSize = matrix.gridSize;
+    for (let index = 0; index < matrix.voxelCount; index += 1) {
       if (!matrix.bits[index]) {
         continue;
       }
-      const [x, y, z] = indexToCoord(index);
+      const [x, y, z] = indexToCoord(index, gridSize);
       const neighbors: Array<[number, Vec3]> = [];
-      if (x < 8 && matrix.bits[voxelIndex(x + 1, y, z)]) {
-        neighbors.push([voxelIndex(x + 1, y, z), [x + 0.5, y, z]]);
+      if (x < gridSize - 1 && matrix.bits[voxelIndex(x + 1, y, z, gridSize)]) {
+        neighbors.push([
+          voxelIndex(x + 1, y, z, gridSize),
+          [x + 0.5, y, z],
+        ]);
       }
-      if (y < 8 && matrix.bits[voxelIndex(x, y + 1, z)]) {
-        neighbors.push([voxelIndex(x, y + 1, z), [x, y + 0.5, z]]);
+      if (y < gridSize - 1 && matrix.bits[voxelIndex(x, y + 1, z, gridSize)]) {
+        neighbors.push([
+          voxelIndex(x, y + 1, z, gridSize),
+          [x, y + 0.5, z],
+        ]);
       }
-      if (z < 8 && matrix.bits[voxelIndex(x, y, z + 1)]) {
-        neighbors.push([voxelIndex(x, y, z + 1), [x, y, z + 0.5]]);
+      if (z < gridSize - 1 && matrix.bits[voxelIndex(x, y, z + 1, gridSize)]) {
+        neighbors.push([
+          voxelIndex(x, y, z + 1, gridSize),
+          [x, y, z + 0.5],
+        ]);
       }
       for (const [neighbor, midpoint] of neighbors) {
         const voxelA = voxelByIndex.get(index);
@@ -273,9 +290,11 @@ function PipeField({
         if (design.contrastGuard) {
           return new THREE.Color(rgbToHex(sampleContrastRgb(connection.contrast)));
         }
-        return new THREE.Color(sampleGradient(design, connection.colorSeed));
+        return new THREE.Color(
+          sampleGradient(design, connection.colorSeed, matrix.gridSize),
+        );
       }),
-    [connections, design],
+    [connections, design, matrix.gridSize],
   );
 
   const scratch = useMemo(
@@ -345,7 +364,8 @@ function PipeField({
       } else {
         direction.divideScalar(length);
         quaternion.setFromUnitVectors(up, direction);
-        const radius = Math.min(1, Math.sqrt(visibility));
+        const radius =
+          Math.min(1, Math.sqrt(visibility)) * worldSpacing(matrix.gridSize);
         scale.set(radius, length, radius);
       }
       scratchMatrix.compose(mid, quaternion, scale);
@@ -456,11 +476,11 @@ export function VoxelField({
   const activeVoxels = useMemo(() => {
     const scores = contrastScores(matrix);
     const voxels: ActiveVoxel[] = [];
-    for (let index = 0; index < VOXEL_COUNT; index += 1) {
+    for (let index = 0; index < matrix.voxelCount; index += 1) {
       if (!matrix.bits[index]) {
         continue;
       }
-      const coord = indexToCoord(index);
+      const coord = indexToCoord(index, matrix.gridSize);
       const seed = hashCell(matrix.seed, coord[0], coord[1], coord[2]);
       voxels.push({
         index,
@@ -468,14 +488,10 @@ export function VoxelField({
         y: coord[1],
         z: coord[2],
         coord,
-        base: [
-          coord[0] - GRID_HALF,
-          coord[1] - GRID_HALF,
-          coord[2] - GRID_HALF,
-        ],
+        base: coordToWorld(coord, matrix.gridSize),
         variant: seed % geometries.variants.length,
         contrast: scores[index],
-        shapeMask: shapeMask(design.shape, coord),
+        shapeMask: shapeMask(design.shape, coord, matrix.gridSize),
         seed: seed / 0xffffffff,
       });
     }
@@ -487,20 +503,35 @@ export function VoxelField({
     [activeVoxels],
   );
 
+  const baseScale = worldSpacing(matrix.gridSize);
   const groups = useMemo(() => {
     if (design.geometry === "classic") {
-      return [{ key: "classic", geometry: geometries.box, voxels: activeVoxels, scale: 1 }];
+      return [
+        {
+          key: "classic",
+          geometry: geometries.box,
+          voxels: activeVoxels,
+          scale: baseScale,
+        },
+      ];
     }
     if (design.geometry === "maze") {
-      return [{ key: "maze-joints", geometry: geometries.joint, voxels: activeVoxels, scale: 1 }];
+      return [
+        {
+          key: "maze-joints",
+          geometry: geometries.joint,
+          voxels: activeVoxels,
+          scale: baseScale,
+        },
+      ];
     }
     return geometries.variants.map((geometry, variant) => ({
       key: `poly-${variant}`,
       geometry,
       voxels: activeVoxels.filter((voxel) => voxel.variant === variant),
-      scale: 1,
+      scale: baseScale,
     }));
-  }, [activeVoxels, design.geometry, geometries]);
+  }, [activeVoxels, design.geometry, geometries, baseScale]);
 
   return (
     <group>
@@ -519,6 +550,14 @@ export function VoxelField({
           />
         ) : null,
       )}
+      {design.faceCodeMode !== "off" ? (
+        <FaceCodes
+          matrix={matrix}
+          design={design}
+          layers={animationLayers}
+          timeRef={timeRef}
+        />
+      ) : null}
       {design.geometry === "maze" ? (
         <PipeField
           key={`${matrix.id}-pipes`}

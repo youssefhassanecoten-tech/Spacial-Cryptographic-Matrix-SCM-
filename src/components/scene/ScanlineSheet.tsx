@@ -2,7 +2,6 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { AnimationLayer } from "../../types";
-import { GRID_HALF } from "../../types";
 import { getScanlineState } from "../../lib/animation";
 
 export function ScanlineSheet({
@@ -24,8 +23,8 @@ export function ScanlineSheet({
     if (!state.active) {
       return;
     }
-    const extent = GRID_HALF * 2;
-    const travel = -GRID_HALF + state.progress * extent;
+    const extent = 8.8;
+    const travel = -4.4 + state.progress * extent;
     group.rotation.set(0, 0, 0);
     if (state.axis === "x") {
       group.rotation.y = Math.PI / 2;

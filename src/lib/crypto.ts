@@ -5,7 +5,7 @@ import type {
   SCMPayloadManifest,
   SCMTokenPayload,
 } from "../types";
-import { stableHash } from "./scm";
+import { normalizeGridSize, stableHash } from "./scm";
 
 const TOKEN_PREFIX = "SCM1";
 const CONTAINER_PREFIX = "SCMC1";
@@ -201,13 +201,14 @@ function validatePayload(value: unknown): SCMTokenPayload {
   if (!Array.isArray(payload.anchors) || payload.anchors.length !== 3) {
     throw new Error("Token must contain exactly three alignment anchors.");
   }
+  const gridSize = normalizeGridSize(payload.gridSize ?? 9);
   for (const anchor of payload.anchors) {
     if (
       !Array.isArray(anchor) ||
       anchor.length !== 3 ||
       anchor.some(
         (value) =>
-          !Number.isInteger(value) || value < 0 || value > 8,
+          !Number.isInteger(value) || value < 0 || value >= gridSize,
       )
     ) {
       throw new Error("Token contains an out-of-bounds anchor coordinate.");
@@ -233,6 +234,7 @@ function validatePayload(value: unknown): SCMTokenPayload {
     label: typeof payload.label === "string" ? payload.label : "SCM Lattice",
     createdAt:
       typeof payload.createdAt === "string" ? payload.createdAt : new Date(0).toISOString(),
+    gridSize,
     anchors: payload.anchors.map((anchor) => [anchor[0], anchor[1], anchor[2]]),
     ...(payload.shapeId ? { shapeId: payload.shapeId } : {}),
     ...(payload.salt ? { salt: payload.salt } : {}),

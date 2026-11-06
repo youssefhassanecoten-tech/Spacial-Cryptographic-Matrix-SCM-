@@ -6,8 +6,8 @@ import type {
   Vec3,
   WaveMode,
 } from "../types";
-import { GRID_HALF, GRID_SIZE } from "../types";
 import { randomId } from "./rng";
+import { worldSpacing } from "./scm";
 
 export const EASINGS: Record<EasingName, (t: number) => number> = {
   linear: (t) => t,
@@ -79,14 +79,15 @@ function waveOffset(
   mode: WaveMode,
   axis: "x" | "y" | "z",
   anchors: Vec3[],
+  gridSize: number,
 ): number {
   if (mode === "spiral") {
-    const maxDistance = Math.sqrt(3) * GRID_SIZE;
+    const maxDistance = Math.sqrt(3) * gridSize;
     const coord: Vec3 = [voxel.x, voxel.y, voxel.z];
     return distanceFromAnchors(coord, anchors) / maxDistance;
   }
   const value = axis === "x" ? voxel.x : axis === "y" ? voxel.y : voxel.z;
-  return value / (GRID_SIZE - 1);
+  return value / Math.max(1, gridSize - 1);
 }
 
 export function computeVoxelAnimation(
@@ -102,6 +103,9 @@ export function computeVoxelAnimation(
   out.scale = 1;
   out.glow = 1;
 
+  const gridSize = matrix.gridSize;
+  const half = (gridSize - 1) / 2;
+  const spacing = worldSpacing(gridSize);
   let anchors3D: Vec3[] | null = null;
   const spatialPhase =
     voxel.x * 0.73 + voxel.y * 1.19 + voxel.z * 1.61 + matrix.seed * 0.00001;
@@ -120,9 +124,9 @@ export function computeVoxelAnimation(
         const start = rank * 0.5;
         const local = Math.max(0, Math.min(1, (phase.phase - start) / (1 - start)));
         const factor = Math.sin(Math.PI * local) * layer.intensity;
-        const dx = voxel.x - GRID_HALF;
-        const dy = voxel.y - GRID_HALF;
-        const dz = voxel.z - GRID_HALF;
+        const dx = voxel.x - half;
+        const dy = voxel.y - half;
+        const dz = voxel.z - half;
         const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
         const nx = length > 0.001 ? dx / length : 0;
         const ny = length > 0.001 ? dy / length : 1;
@@ -134,7 +138,13 @@ export function computeVoxelAnimation(
       }
       case "layerWave": {
         anchors3D ??= matrix.anchors.map((anchor) => anchor.coord);
-        const offset = waveOffset(voxel, layer.mode, layer.axis, anchors3D);
+        const offset = waveOffset(
+          voxel,
+          layer.mode,
+          layer.axis,
+          anchors3D,
+          gridSize,
+        );
         const start = offset * 0.55;
         const raw = Math.max(0, Math.min(1, (phase.phase - start) / 0.45));
         out.scale *= Math.max(0.0001, EASINGS[layer.easing](raw));
@@ -151,9 +161,14 @@ export function computeVoxelAnimation(
         break;
       }
       case "scanline": {
-        const world = (layer.axis === "x" ? voxel.x : layer.axis === "y" ? voxel.y : voxel.z) - GRID_HALF;
-        const sweep = -GRID_HALF + phase.phase * (GRID_SIZE - 1);
-        const proximity = Math.max(0, 1 - Math.abs(world - sweep) / 1.1);
+        const axisValue =
+          layer.axis === "x" ? voxel.x : layer.axis === "y" ? voxel.y : voxel.z;
+        const world = (axisValue - half) * spacing;
+        const sweep = -4.4 + phase.phase * 8.8;
+        const proximity = Math.max(
+          0,
+          1 - Math.abs(world - sweep) / Math.max(0.35, spacing * 1.2),
+        );
         out.glow *= 1 + proximity * 1.6 * layer.intensity;
         break;
       }

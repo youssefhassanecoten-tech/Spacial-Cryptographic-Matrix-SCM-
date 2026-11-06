@@ -3,10 +3,13 @@ import {
   Boxes,
   KeyRound,
   LoaderCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Share2,
 } from "lucide-react";
 import { copyText } from "../lib/clipboard";
+import { getAppBaseUrl } from "../lib/crypto";
 import { buildGuestLink } from "../lib/vault";
 import { useStudio } from "../store/useStudio";
 import { Badge, Button, IconButton } from "./ui";
@@ -17,8 +20,10 @@ export function Header() {
   const tokenStatus = useStudio((state) => state.tokenStatus);
   const sealed = useStudio((state) => state.sealed);
   const guestMode = useStudio((state) => state.guestMode);
+  const sidebarCollapsed = useStudio((state) => state.sidebarCollapsed);
   const setTab = useStudio((state) => state.setTab);
   const newSCM = useStudio((state) => state.newSCM);
+  const toggleSidebar = useStudio((state) => state.toggleSidebar);
   const notify = useStudio((state) => state.notify);
   const [busy, setBusy] = useState(false);
 
@@ -42,6 +47,14 @@ export function Header() {
     setBusy(false);
   };
 
+  const goHome = () => {
+    if (guestMode) {
+      window.location.href = getAppBaseUrl();
+      return;
+    }
+    setTab("design");
+  };
+
   const statusTone =
     tokenStatus === "ready"
       ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
@@ -53,7 +66,12 @@ export function Header() {
 
   return (
     <header className="relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.07] bg-[#060a12]/85 px-3 backdrop-blur-xl md:gap-3 md:px-4">
-      <div className="flex min-w-0 items-center gap-2.5">
+      <button
+        type="button"
+        onClick={goHome}
+        title={guestMode ? "Return to SCM Studio home" : "Studio home"}
+        className="flex min-w-0 items-center gap-2.5 rounded-xl text-left transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+      >
         <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400/20 via-violet-400/10 to-rose-400/20 ring-1 ring-cyan-300/30">
           <Boxes className="h-4 w-4 text-cyan-200" />
           <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_2px] shadow-emerald-300/50" />
@@ -63,14 +81,14 @@ export function Header() {
             SCM STUDIO
           </h1>
           <p className="hidden truncate font-mono text-[8px] uppercase tracking-[0.18em] text-slate-500 sm:block">
-            3D cryptographic matrix · phase 6
+            3D cryptographic matrix · phase 7
           </p>
         </div>
-      </div>
+      </button>
 
       {!guestMode ? (
         <div className="ml-2 hidden items-center gap-2 lg:flex">
-          <Badge tone="cyan">9³ lattice</Badge>
+          <Badge tone="cyan">{matrix.gridSize}³ lattice</Badge>
           <Badge tone="violet">{matrix.activeCount} voxels</Badge>
           <span className="max-w-40 truncate font-mono text-[9px] text-slate-500">
             {matrix.label}
@@ -81,6 +99,17 @@ export function Header() {
       <div className="ml-auto flex items-center gap-1.5">
         {!guestMode ? (
           <>
+            <IconButton
+              label={sidebarCollapsed ? "Open studio sidebar" : "Collapse studio sidebar"}
+              onClick={toggleSidebar}
+              active={!sidebarCollapsed}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen className="h-3.5 w-3.5" />
+              ) : (
+                <PanelLeftClose className="h-3.5 w-3.5" />
+              )}
+            </IconButton>
             <span
               className={`hidden items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-wider sm:flex ${statusTone}`}
             >

@@ -24,6 +24,7 @@ let bootstrapped = false;
 
 export default function App() {
   const guestMode = useStudio((state) => state.guestMode);
+  const sidebarCollapsed = useStudio((state) => state.sidebarCollapsed);
 
   useEffect(() => {
     if (bootstrapped) {
@@ -69,15 +70,23 @@ export default function App() {
         <GuestView />
       ) : (
         <main className="relative z-10 flex min-h-0 flex-1 flex-col lg:flex-row">
-          <section className="relative order-1 h-[42vh] shrink-0 overflow-hidden lg:order-2 lg:h-auto lg:flex-1 lg:shrink">
+          <section
+            className={
+              sidebarCollapsed
+                ? "relative order-1 min-h-0 flex-1 overflow-hidden lg:order-2"
+                : "relative order-1 h-[42vh] shrink-0 overflow-hidden lg:order-2 lg:h-auto lg:flex-1 lg:shrink"
+            }
+          >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(14,116,144,0.14),transparent_58%)]" />
             <Scene />
             <CanvasOverlay />
             <PlaybackBar />
           </section>
-          <aside className="order-2 flex min-h-0 w-full flex-1 flex-col border-t border-white/[0.07] bg-[#070b14]/92 backdrop-blur-xl lg:order-1 lg:w-[382px] lg:flex-none lg:border-r lg:border-t-0">
-            <StudioPanel />
-          </aside>
+          {!sidebarCollapsed ? (
+            <aside className="order-2 flex min-h-0 w-full flex-1 flex-col border-t border-white/[0.07] bg-[#070b14]/92 backdrop-blur-xl lg:order-1 lg:w-[382px] lg:flex-none lg:border-r lg:border-t-0">
+              <StudioPanel />
+            </aside>
+          ) : null}
         </main>
       )}
       <RevealOverlay />

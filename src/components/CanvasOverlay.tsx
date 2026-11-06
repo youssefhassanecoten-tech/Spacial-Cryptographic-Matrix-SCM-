@@ -5,7 +5,6 @@ import {
   Route,
   ShieldAlert,
 } from "lucide-react";
-import { VOXEL_COUNT } from "../types";
 import { useStudio } from "../store/useStudio";
 import { IconButton } from "./ui";
 
@@ -36,7 +35,7 @@ export function CanvasOverlay() {
             live viewport
           </span>
           <span className="rounded-lg border border-white/10 bg-[#050910]/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-slate-400 backdrop-blur">
-            lattice 9³ · {VOXEL_COUNT}
+            lattice {matrix.gridSize}³ · {matrix.voxelCount}
           </span>
           <span className="rounded-lg border border-white/10 bg-[#050910]/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-slate-400 backdrop-blur">
             active <span className="text-cyan-300">{matrix.activeCount}</span>

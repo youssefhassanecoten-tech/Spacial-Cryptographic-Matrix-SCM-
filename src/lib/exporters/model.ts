@@ -1,5 +1,4 @@
 import type { ExportOptions, SCMMatrix } from "../../types";
-import { GRID_HALF, GRID_SIZE } from "../../types";
 import { indexToCoord } from "../scm";
 
 type TriangleSoup = {
@@ -70,7 +69,9 @@ export function buildModelSoup(matrix: SCMMatrix, options: ExportOptions): Trian
   const scale = Math.max(0.5, options.scale);
   const baseThickness = Math.max(0.2, options.baseThickness);
   const margin = scale * 0.6;
-  const baseSize = GRID_SIZE * scale + margin * 2;
+  const gridSize = matrix.gridSize;
+  const half = (gridSize - 1) / 2;
+  const baseSize = gridSize * scale + margin * 2;
 
   if (options.includeBasePlate) {
     pushBox(soup, [0, -baseThickness / 2, 0], [baseSize, baseThickness, baseSize]);
@@ -81,13 +82,13 @@ export function buildModelSoup(matrix: SCMMatrix, options: ExportOptions): Trian
     if (!matrix.bits[index]) {
       continue;
     }
-    const [x, y, z] = indexToCoord(index);
+    const [x, y, z] = indexToCoord(index, gridSize);
     pushBox(
       soup,
       [
-        (x - GRID_HALF) * scale,
+        (x - half) * scale,
         y * scale + scale / 2,
-        (z - GRID_HALF) * scale,
+        (z - half) * scale,
       ],
       [voxelSize, voxelSize, voxelSize],
     );

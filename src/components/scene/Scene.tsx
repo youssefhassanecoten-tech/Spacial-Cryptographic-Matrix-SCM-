@@ -58,8 +58,14 @@ function SceneContent() {
 
       <group>
         <VoxelField matrix={matrix} design={design} layers={layers} timeRef={timeRef} />
-        {design.showGrid ? <BlockGrid /> : null}
-        {design.showAnchors ? <AnchorMarkers anchors={matrix.anchors} timeRef={timeRef} /> : null}
+        {design.showGrid ? <BlockGrid gridSize={matrix.gridSize} /> : null}
+        {design.showAnchors ? (
+          <AnchorMarkers
+            anchors={matrix.anchors}
+            gridSize={matrix.gridSize}
+            timeRef={timeRef}
+          />
+        ) : null}
         {design.showTrajectory ? (
           <TrajectoryLine matrix={matrix} layers={layers} timeRef={timeRef} />
         ) : null}

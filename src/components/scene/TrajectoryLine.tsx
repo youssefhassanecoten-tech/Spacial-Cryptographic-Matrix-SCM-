@@ -24,13 +24,13 @@ export function TrajectoryLine({
   const pathVoxels = useMemo(
     () =>
       matrix.path.map((index) => {
-        const coord = indexToCoord(index);
+        const coord = indexToCoord(index, matrix.gridSize);
         return {
           index,
           x: coord[0],
           y: coord[1],
           z: coord[2],
-          base: coordToWorld(coord),
+          base: coordToWorld(coord, matrix.gridSize),
         };
       }),
     [matrix],

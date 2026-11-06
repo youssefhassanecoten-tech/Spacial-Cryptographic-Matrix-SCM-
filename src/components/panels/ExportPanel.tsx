@@ -172,7 +172,7 @@ export function ExportPanel() {
           <Toggle
             compact
             label="Base plate"
-            description="Solid plinth sized to the 9 × 9 footprint"
+            description={`Solid plinth sized to the ${matrix.gridSize} × ${matrix.gridSize} footprint`}
             checked={modelOptions.includeBasePlate}
             onChange={(includeBasePlate) =>
               setModelOptions((options) => ({ ...options, includeBasePlate }))
@@ -237,9 +237,9 @@ export function ExportPanel() {
             <StatRow label="Vertices" value={estimate.vertices} />
             <StatRow
               label="Footprint"
-              value={`${(9 * modelOptions.scale + 2 * modelOptions.scale * 0.6).toFixed(
+              value={`${(matrix.gridSize * modelOptions.scale + 2 * modelOptions.scale * 0.6).toFixed(
                 1,
-              )} × ${(9 * modelOptions.scale + 2 * modelOptions.scale * 0.6).toFixed(1)} mm`}
+              )} × ${(matrix.gridSize * modelOptions.scale + 2 * modelOptions.scale * 0.6).toFixed(1)} mm`}
             />
           </div>
         </div>

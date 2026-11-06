@@ -88,9 +88,11 @@ export function flattenToConstellation(
 }
 
 export function buildTrajectory(matrix: SCMMatrix): TrajectoryResult {
-  const coords = matrix.path.map(indexToCoord);
-  const points3D = coords.map((coord) => coordToWorld(coord));
-  const anchorPoints3D = matrix.anchors.map((anchor) => coordToWorld(anchor.coord));
+  const coords = matrix.path.map((index) => indexToCoord(index, matrix.gridSize));
+  const points3D = coords.map((coord) => coordToWorld(coord, matrix.gridSize));
+  const anchorPoints3D = matrix.anchors.map((anchor) =>
+    coordToWorld(anchor.coord, matrix.gridSize),
+  );
   const segments: Array<[Vec3, Vec3]> = [];
   for (let i = 0; i < points3D.length - 1; i += 1) {
     segments.push([points3D[i], points3D[i + 1]]);
@@ -140,7 +142,7 @@ export function validateTrajectory(
   matrix: SCMMatrix,
   trajectory: TrajectoryResult,
 ): TrajectoryChecks {
-  const coords = matrix.path.map(indexToCoord);
+  const coords = matrix.path.map((index) => indexToCoord(index, matrix.gridSize));
   const allPathBitsActive = matrix.path.every((index) => matrix.bits[index] === 1);
   let connectedSegments = true;
   for (let i = 0; i < coords.length - 1; i += 1) {

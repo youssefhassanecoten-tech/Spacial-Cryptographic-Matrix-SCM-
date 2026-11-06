@@ -1,20 +1,30 @@
 {
   "name": "scm-studio",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.2.0",
+  "description": "Local-first 3D cryptographic matrix studio, sealed payload vault, and guest viewer",
+  "author": "Youssef Hassan",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "build:electron": "cross-env VITE_BASE_PATH=./ VITE_PUBLIC_APP_URL=https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/ npm run build",
+    "electron": "electron .",
+    "dist:win": "npm run build:electron && electron-builder --win portable",
+    "dist:win:installer": "npm run build:electron && electron-builder --win nsis",
+    "dist:mac": "npm run build:electron && electron-builder --mac dmg",
+    "dist:linux": "npm run build:electron && electron-builder --linux AppImage"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",
     "@capacitor/core": "^8.6.0",
     "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/ios": "^8.6.0",
     "@capacitor/share": "^8.0.0",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.2",
@@ -37,10 +47,47 @@
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^6.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "tailwindcss": "^4.3.4",
     "typescript": "~5.9.3",
     "vite": "^8.3.5",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.1.0"
+  },
+  "build": {
+    "appId": "com.youssefhassan.scm",
+    "productName": "SCM Studio",
+    "copyright": "Copyright © 2026 Youssef Hassan",
+    "directories": {
+      "output": "release-electron",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "SCM-Studio-Portable-${version}.${ext}"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Utility",
+      "icon": "build/icon.png"
+    }
   }
 }

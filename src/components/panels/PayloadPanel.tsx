@@ -20,15 +20,21 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { PayloadKind } from "../../types";
+import type { GridSizeOption, PayloadKind } from "../../types";
+import { GRID_SIZE_OPTIONS } from "../../types";
 import { downloadBlob, safeFilename } from "../../lib/download";
 import type { PayloadDraftItem } from "../../lib/vault";
-import { useStudio } from "../../store/useStudio";
+import {
+  autoGridSizeForDrafts,
+  resolveGridSize,
+  useStudio,
+} from "../../store/useStudio";
 import { UnlockForm } from "../UnlockForm";
 import {
   Badge,
   Button,
   PanelSection,
+  Segmented,
   StatRow,
   TextInput,
 } from "../ui";
@@ -137,6 +143,7 @@ export function PayloadPanel() {
   const editing = useStudio((state) => state.editing);
   const previousVersions = useStudio((state) => state.previousVersions);
   const matrix = useStudio((state) => state.matrix);
+  const design = useStudio((state) => state.design);
   const addTextDraft = useStudio((state) => state.addTextDraft);
   const addFiles = useStudio((state) => state.addFiles);
   const removeDraft = useStudio((state) => state.removeDraft);
@@ -145,6 +152,8 @@ export function PayloadPanel() {
   const sealPayload = useStudio((state) => state.sealPayload);
   const setTab = useStudio((state) => state.setTab);
   const notify = useStudio((state) => state.notify);
+  const gridChoice = useStudio((state) => state.gridChoice);
+  const setGridChoice = useStudio((state) => state.setGridChoice);
 
   const [text, setText] = useState("");
   const [label, setLabel] = useState(matrix.label);
@@ -171,6 +180,15 @@ export function PayloadPanel() {
     .filter((draft) => draft.kind === "text" && draft.size <= 2048)
     .reduce((sum, draft) => sum + draft.size, 0);
   const packageEstimate = totalSize - embeddedEstimate;
+  const autoSize = autoGridSizeForDrafts(drafts);
+  const effectiveSize = resolveGridSize(gridChoice, drafts);
+  const gridOptions: Array<{ value: GridSizeOption; label: string }> = [
+    { value: "auto", label: "Auto" },
+    ...GRID_SIZE_OPTIONS.map((size) => ({
+      value: String(size) as GridSizeOption,
+      label: `${size}³`,
+    })),
+  ];
 
   const handleSeal = async () => {
     setBusy(true);
@@ -433,6 +451,48 @@ export function PayloadPanel() {
             <FolderUp className="h-3 w-3" />
             Add folder
           </Button>
+        </div>
+      </PanelSection>
+
+      <PanelSection
+        icon={<Package className="h-3.5 w-3.5" />}
+        title="Matrix Scale"
+        hint="Auto grows the lattice with payload size. 3³ and 6³ are manual mini modes with a face code on every active cube; 9³ and above use sparse anchor-path face markers."
+        action={<Badge tone="cyan">seal at {effectiveSize}³</Badge>}
+      >
+        <Segmented
+          value={gridChoice}
+          onChange={(choice) => setGridChoice(choice as GridSizeOption)}
+          options={gridOptions}
+          columns={4}
+        />
+        <div className="mt-2 rounded-lg border border-white/[0.05] bg-black/20 p-2">
+          <StatRow
+            label="Auto target"
+            value={`${autoSize}³ · ${autoSize ** 3} voxels`}
+            tone="cyan"
+          />
+          <StatRow
+            label="Manual target"
+            value={
+              gridChoice === "auto"
+                ? "automatic"
+                : `${effectiveSize}³ · ${effectiveSize ** 3} voxels`
+            }
+            tone={gridChoice === "auto" ? "slate" : "violet"}
+          />
+          <StatRow
+            label="Face codes"
+            value={
+              design.faceCodeMode === "off"
+                ? "off"
+                : design.faceCodeMode === "all"
+                  ? "all active cubes"
+                  : effectiveSize < 9
+                    ? "all active cubes"
+                    : "anchor path"
+            }
+          />
         </div>
       </PanelSection>
 

@@ -12,7 +12,6 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import { VOXEL_COUNT } from "../../types";
 import { copyText } from "../../lib/clipboard";
 import { tokenFingerprint } from "../../lib/crypto";
 import { downloadBlob, downloadText, safeFilename } from "../../lib/download";
@@ -70,7 +69,7 @@ export function TokenPanel() {
           />
           <StatRow
             label="active"
-            value={`${matrix.activeCount} / ${VOXEL_COUNT}`}
+            value={`${matrix.activeCount} / ${matrix.voxelCount}`}
           />
           <StatRow
             label="payload"

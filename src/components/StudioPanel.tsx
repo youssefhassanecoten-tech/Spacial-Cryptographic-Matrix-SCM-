@@ -9,7 +9,6 @@ import {
   Palette,
 } from "lucide-react";
 import type { StudioTab } from "../types";
-import { VOXEL_COUNT } from "../types";
 import { useStudio } from "../store/useStudio";
 import { AnimatePanel } from "./panels/AnimatePanel";
 import { DecryptPanel } from "./panels/DecryptPanel";
@@ -78,7 +77,7 @@ export function StudioPanel() {
               {matrix.label}
             </h2>
             <p className="mt-0.5 truncate font-mono text-[9px] text-slate-500">
-              {matrix.id} · {matrix.activeCount}/{VOXEL_COUNT} active · {enabledLayers} layers
+              {matrix.id} · {matrix.activeCount}/{matrix.voxelCount} active · {enabledLayers} layers
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">

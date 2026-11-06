@@ -1,5 +1,6 @@
 import type { DesignState, Vec3 } from "../types";
-import { GRID_HALF, GRID_SIZE } from "../types";
+import { DEFAULT_GRID_SIZE } from "../types";
+
 
 export interface RGB {
   r: number;
@@ -50,18 +51,28 @@ function threeStopGradient(a: string, b: string, c: string, t: number): string {
   return amount < 0.5 ? mixHex(a, b, amount * 2) : mixHex(b, c, (amount - 0.5) * 2);
 }
 
-export function sampleGradient(design: DesignState, coord: Vec3): string {
+export function sampleGradient(
+  design: DesignState,
+  coord: Vec3,
+  gridSize = DEFAULT_GRID_SIZE,
+): string {
   const [x, y, z] = coord;
   if (design.gradient === "none") {
     return design.colorBase;
   }
   if (design.gradient === "linear") {
-    return threeStopGradient(design.colorA, design.colorB, design.colorC, z / (GRID_SIZE - 1));
+    return threeStopGradient(
+      design.colorA,
+      design.colorB,
+      design.colorC,
+      z / Math.max(1, gridSize - 1),
+    );
   }
-  const dx = x - GRID_HALF;
-  const dy = y - GRID_HALF;
-  const dz = z - GRID_HALF;
-  const maxDistance = Math.sqrt(3) * GRID_HALF;
+  const half = (gridSize - 1) / 2;
+  const dx = x - half;
+  const dy = y - half;
+  const dz = z - half;
+  const maxDistance = Math.sqrt(3) * Math.max(half, 1);
   const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) / maxDistance;
   return threeStopGradient(design.colorA, design.colorB, design.colorC, distance);
 }

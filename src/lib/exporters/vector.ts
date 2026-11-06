@@ -1,5 +1,4 @@
 import type { DesignState, SCMMatrix, Vec3 } from "../../types";
-import { GRID_SIZE } from "../../types";
 import { sampleGradient } from "../color";
 import { indexToCoord, voxelIndex } from "../scm";
 
@@ -9,9 +8,8 @@ export interface FaceDef {
   id: FaceId;
   label: string;
   subtitle: string;
-  depthFrom: number;
-  depthTo: number;
-  coordFor: (u: number, v: number, depth: number) => Vec3;
+  side: "min" | "max";
+  coordFor: (u: number, v: number, depth: number, gridSize: number) => Vec3;
 }
 
 export interface FaceCell {
@@ -24,6 +22,7 @@ export interface FaceCell {
 
 export interface FaceMap {
   def: FaceDef;
+  gridSize: number;
   cells: FaceCell[];
   activeCount: number;
 }
@@ -33,48 +32,42 @@ export const FACE_DEFS: FaceDef[] = [
     id: "front",
     label: "Front",
     subtitle: "Z-MAX ORTHOGRAPHIC",
-    depthFrom: GRID_SIZE - 1,
-    depthTo: 0,
-    coordFor: (u, v, depth) => [u, GRID_SIZE - 1 - v, depth],
+    side: "max",
+    coordFor: (u, v, depth, gridSize) => [u, gridSize - 1 - v, depth],
   },
   {
     id: "back",
     label: "Back",
     subtitle: "Z-MIN ORTHOGRAPHIC",
-    depthFrom: 0,
-    depthTo: GRID_SIZE - 1,
-    coordFor: (u, v, depth) => [GRID_SIZE - 1 - u, GRID_SIZE - 1 - v, depth],
+    side: "min",
+    coordFor: (u, v, depth, gridSize) => [gridSize - 1 - u, gridSize - 1 - v, depth],
   },
   {
     id: "right",
     label: "Right",
     subtitle: "X-MAX ORTHOGRAPHIC",
-    depthFrom: GRID_SIZE - 1,
-    depthTo: 0,
-    coordFor: (u, v, depth) => [depth, GRID_SIZE - 1 - v, GRID_SIZE - 1 - u],
+    side: "max",
+    coordFor: (u, v, depth, gridSize) => [depth, gridSize - 1 - v, gridSize - 1 - u],
   },
   {
     id: "left",
     label: "Left",
     subtitle: "X-MIN ORTHOGRAPHIC",
-    depthFrom: 0,
-    depthTo: GRID_SIZE - 1,
-    coordFor: (u, v, depth) => [depth, GRID_SIZE - 1 - v, u],
+    side: "min",
+    coordFor: (u, v, depth, gridSize) => [depth, gridSize - 1 - v, u],
   },
   {
     id: "top",
     label: "Top",
     subtitle: "Y-MAX ORTHOGRAPHIC",
-    depthFrom: GRID_SIZE - 1,
-    depthTo: 0,
-    coordFor: (u, v, depth) => [u, depth, GRID_SIZE - 1 - v],
+    side: "max",
+    coordFor: (u, v, depth, gridSize) => [u, depth, gridSize - 1 - v],
   },
   {
     id: "bottom",
     label: "Bottom",
     subtitle: "Y-MIN ORTHOGRAPHIC",
-    depthFrom: 0,
-    depthTo: GRID_SIZE - 1,
+    side: "min",
     coordFor: (u, v, depth) => [u, depth, v],
   },
 ];
@@ -84,22 +77,31 @@ export function buildFaceMap(
   design: DesignState,
   face: FaceDef,
 ): FaceMap {
+  const gridSize = matrix.gridSize;
   const cells: FaceCell[] = [];
   let activeCount = 0;
-  for (let v = 0; v < GRID_SIZE; v += 1) {
-    for (let u = 0; u < GRID_SIZE; u += 1) {
-      const step = face.depthFrom <= face.depthTo ? 1 : -1;
+  const depthFrom = face.side === "max" ? gridSize - 1 : 0;
+  const depthTo = face.side === "max" ? 0 : gridSize - 1;
+  const step = depthFrom <= depthTo ? 1 : -1;
+
+  for (let v = 0; v < gridSize; v += 1) {
+    for (let u = 0; u < gridSize; u += 1) {
       let active = false;
-      let coord = face.coordFor(u, v, face.depthFrom);
-      for (let depth = face.depthFrom; ; depth += step) {
-        const candidate = face.coordFor(u, v, depth);
-        const index = voxelIndex(candidate[0], candidate[1], candidate[2]);
+      let coord = face.coordFor(u, v, depthFrom, gridSize);
+      for (let depth = depthFrom; ; depth += step) {
+        const candidate = face.coordFor(u, v, depth, gridSize);
+        const index = voxelIndex(
+          candidate[0],
+          candidate[1],
+          candidate[2],
+          gridSize,
+        );
         if (matrix.bits[index] === 1) {
           active = true;
           coord = candidate;
           break;
         }
-        if (depth === face.depthTo) {
+        if (depth === depthTo) {
           break;
         }
       }
@@ -110,12 +112,12 @@ export function buildFaceMap(
         u,
         v,
         active,
-        color: sampleGradient(design, coord),
+        color: sampleGradient(design, coord, gridSize),
         coord,
       });
     }
   }
-  return { def: face, cells, activeCount };
+  return { def: face, gridSize, cells, activeCount };
 }
 
 export function buildAllFaceMaps(matrix: SCMMatrix, design: DesignState): FaceMap[] {
@@ -131,31 +133,34 @@ function escapeXml(value: string): string {
 }
 
 export function faceMapSvg(map: FaceMap, size = 1024): string {
+  const gridSize = map.gridSize;
   const padding = size * 0.1;
   const titleHeight = size * 0.12;
-  const gridSize = size - padding * 2;
+  const gridSizePx = size - padding * 2;
   const originX = padding;
   const originY = titleHeight;
-  const gap = gridSize * 0.009;
-  const cell = (gridSize - gap * (GRID_SIZE - 1)) / GRID_SIZE;
+  const gap = gridSizePx * 0.009;
+  const cell = (gridSizePx - gap * (gridSize - 1)) / gridSize;
   const cells = map.cells
     .map((entry) => {
       const x = originX + entry.u * (cell + gap);
       const y = originY + entry.v * (cell + gap);
       const fill = entry.active ? entry.color : "#0b1422";
-      const stroke = entry.active ? "rgba(255,255,255,0.12)" : "rgba(148,163,184,0.08)";
-      const rx = Math.max(4, cell * 0.13);
+      const stroke = entry.active
+        ? "rgba(255,255,255,0.12)"
+        : "rgba(148,163,184,0.08)";
+      const rx = Math.max(2, cell * 0.13);
       return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${cell.toFixed(
         2,
       )}" height="${cell.toFixed(2)}" rx="${rx.toFixed(
         2,
       )}" fill="${fill}" stroke="${stroke}" stroke-width="${Math.max(
-        1,
+        0.5,
         cell * 0.012,
       ).toFixed(2)}"${entry.active ? ' opacity="0.96"' : ' opacity="0.55"'}/>`;
     })
     .join("");
-  const footerY = originY + gridSize + size * 0.055;
+  const footerY = originY + gridSizePx + size * 0.055;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -171,9 +176,9 @@ export function faceMapSvg(map: FaceMap, size = 1024): string {
   <rect width="${size}" height="${size}" fill="url(#bg)"/>
   <rect width="${size}" height="${size}" fill="url(#glow)"/>
   <g fill="none" stroke="#22d3ee" stroke-opacity="0.35" stroke-width="${size * 0.002}">
-    <path d="M${padding * 0.5} ${padding * 0.7}h${size * 0.06}M${padding * 0.5} ${
-      padding * 0.7
-    }v${size * 0.06}"/>
+    <path d="M${padding * 0.5} ${padding * 0.7}h${size * 0.06}M${
+      padding * 0.5
+    } ${padding * 0.7}v${size * 0.06}"/>
     <path d="M${size - padding * 0.5} ${padding * 0.7}h-${size * 0.06}M${
       size - padding * 0.5
     } ${padding * 0.7}v${size * 0.06}"/>
@@ -186,7 +191,7 @@ export function faceMapSvg(map: FaceMap, size = 1024): string {
   )}</text>
   <text x="${size - padding}" y="${size * 0.055}" text-anchor="end" fill="#94a3b8" font-family="ui-monospace, monospace" font-size="${size * 0.018}">${map.activeCount} ACTIVE</text>
   <g>${cells}</g>
-  <text x="${padding}" y="${footerY}" fill="#94a3b8" font-family="ui-monospace, monospace" font-size="${size * 0.017}" letter-spacing="${size * 0.0015}">SCM STUDIO · 9×9×9 MATRIX · ORTHOGRAPHIC PROJECTION</text>
+  <text x="${padding}" y="${footerY}" fill="#94a3b8" font-family="ui-monospace, monospace" font-size="${size * 0.017}" letter-spacing="${size * 0.0015}">SCM STUDIO · ${gridSize}×${gridSize}×${gridSize} MATRIX · ORTHOGRAPHIC</text>
   <text x="${size - padding}" y="${footerY}" text-anchor="end" fill="#475569" font-family="ui-monospace, monospace" font-size="${size * 0.015}">${map.def.label.toUpperCase()} / ${map.def.subtitle.split(" ")[0]}</text>
 </svg>`;
 }
@@ -223,13 +228,14 @@ function paintFace(
   size: number,
   compact = false,
 ): void {
+  const gridSize = map.gridSize;
   const padding = size * (compact ? 0.12 : 0.1);
   const titleHeight = size * (compact ? 0.14 : 0.12);
-  const gridSize = size - padding * 2;
+  const gridSizePx = size - padding * 2;
   const originX = padding;
   const originY = titleHeight;
-  const gap = gridSize * 0.009;
-  const cell = (gridSize - gap * (GRID_SIZE - 1)) / GRID_SIZE;
+  const gap = gridSizePx * 0.009;
+  const cell = (gridSizePx - gap * (gridSize - 1)) / gridSize;
   ctx.save();
   const background = ctx.createLinearGradient(0, 0, size, size);
   background.addColorStop(0, "#050810");
@@ -237,7 +243,14 @@ function paintFace(
   background.addColorStop(1, "#0b1020");
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, size, size);
-  const glow = ctx.createRadialGradient(size / 2, size * 0.45, 0, size / 2, size * 0.45, size * 0.7);
+  const glow = ctx.createRadialGradient(
+    size / 2,
+    size * 0.45,
+    0,
+    size / 2,
+    size * 0.45,
+    size * 0.7,
+  );
   glow.addColorStop(0, "rgba(34,211,238,0.13)");
   glow.addColorStop(1, "rgba(34,211,238,0)");
   ctx.fillStyle = glow;
@@ -267,7 +280,7 @@ function paintFace(
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
       ctx.strokeStyle = "rgba(255,255,255,0.16)";
-      ctx.lineWidth = Math.max(1, cell * 0.012);
+      ctx.lineWidth = Math.max(0.5, cell * 0.012);
       ctx.stroke();
     } else {
       ctx.fillStyle = "#0b1422";
@@ -275,7 +288,7 @@ function paintFace(
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.strokeStyle = "rgba(148,163,184,0.09)";
-      ctx.lineWidth = Math.max(1, cell * 0.01);
+      ctx.lineWidth = Math.max(0.5, cell * 0.01);
       ctx.stroke();
     }
   }
@@ -283,13 +296,13 @@ function paintFace(
   ctx.fillStyle = "#64748b";
   ctx.font = `500 ${size * (compact ? 0.022 : 0.017)}px ui-monospace, monospace`;
   ctx.fillText(
-    "SCM STUDIO · 9×9×9 MATRIX · ORTHOGRAPHIC",
+    `SCM STUDIO · ${gridSize}×${gridSize}×${gridSize} MATRIX · ORTHOGRAPHIC`,
     padding,
     size * (compact ? 0.945 : 0.965),
   );
   const corner = size * 0.025;
   ctx.strokeStyle = "rgba(34,211,238,0.4)";
-  ctx.lineWidth = Math.max(1, size * 0.002);
+  ctx.lineWidth = Math.max(0.5, size * 0.002);
   ctx.beginPath();
   ctx.moveTo(padding * 0.5, padding * 0.7);
   ctx.lineTo(padding * 0.5 + corner, padding * 0.7);
@@ -332,6 +345,7 @@ export function contactSheetCanvas(maps: FaceMap[], width = 1800): HTMLCanvasEle
   if (!ctx) {
     throw new Error("2D canvas is unavailable in this browser.");
   }
+  const gridSize = maps[0]?.gridSize ?? 9;
   const background = ctx.createLinearGradient(0, 0, width, height);
   background.addColorStop(0, "#04060c");
   background.addColorStop(1, "#0a0f1d");
@@ -342,7 +356,11 @@ export function contactSheetCanvas(maps: FaceMap[], width = 1800): HTMLCanvasEle
   ctx.fillText("SCM STUDIO · ORTHOGRAPHIC FACE SHEET", 48, 72);
   ctx.fillStyle = "#5eead4";
   ctx.font = "500 20px ui-monospace, monospace";
-  ctx.fillText("SIX-FACE CONTACT PROJECTION · 9×9×9 MATRIX", 48, 102);
+  ctx.fillText(
+    `SIX-FACE CONTACT PROJECTION · ${gridSize}×${gridSize}×${gridSize} MATRIX`,
+    48,
+    102,
+  );
   maps.forEach((map, index) => {
     const col = index % columns;
     const row = Math.floor(index / columns);
@@ -363,13 +381,13 @@ export function contactSheetPngDataUrl(maps: FaceMap[], width = 1800): string {
 
 export function faceMapForCoord(matrix: SCMMatrix, coord: Vec3): FaceCell | undefined {
   const [x, y, z] = coord;
-  const index = voxelIndex(x, y, z);
+  const index = voxelIndex(x, y, z, matrix.gridSize);
   if (!matrix.bits[index]) {
     return undefined;
   }
   return {
     u: x,
-    v: GRID_SIZE - 1 - y,
+    v: matrix.gridSize - 1 - y,
     active: true,
     color: "#5eead4",
     coord,
@@ -380,7 +398,7 @@ export function activeCoords(matrix: SCMMatrix): Vec3[] {
   const coords: Vec3[] = [];
   for (let index = 0; index < matrix.bits.length; index += 1) {
     if (matrix.bits[index]) {
-      coords.push(indexToCoord(index));
+      coords.push(indexToCoord(index, matrix.gridSize));
     }
   }
   return coords;

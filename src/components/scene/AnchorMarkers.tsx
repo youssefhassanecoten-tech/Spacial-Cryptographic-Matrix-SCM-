@@ -7,16 +7,18 @@ import { coordToWorld } from "../../lib/scm";
 
 function AnchorMarker({
   anchor,
+  gridSize,
   timeRef,
 }: {
   anchor: SCMAnchor;
+  gridSize: number;
   timeRef: { current: number };
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const ringARef = useRef<THREE.Mesh>(null);
   const ringBRef = useRef<THREE.Mesh>(null);
   const ringCRef = useRef<THREE.Mesh>(null);
-  const position = coordToWorld(anchor.coord);
+  const position = coordToWorld(anchor.coord, gridSize);
 
   useFrame(() => {
     const time = timeRef.current;
@@ -74,15 +76,22 @@ function AnchorMarker({
 
 export function AnchorMarkers({
   anchors,
+  gridSize,
   timeRef,
 }: {
   anchors: SCMAnchor[];
+  gridSize: number;
   timeRef: { current: number };
 }) {
   return (
     <group>
       {anchors.map((anchor) => (
-        <AnchorMarker key={anchor.id} anchor={anchor} timeRef={timeRef} />
+        <AnchorMarker
+          key={anchor.id}
+          anchor={anchor}
+          gridSize={gridSize}
+          timeRef={timeRef}
+        />
       ))}
     </group>
   );

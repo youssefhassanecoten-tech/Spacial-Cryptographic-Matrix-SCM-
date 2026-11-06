@@ -3,6 +3,7 @@ import type {
   AnimationLayer,
   AnimationType,
   DesignState,
+  GridSizeOption,
   PayloadKind,
   RevealResult,
   SCMShapePayload,
@@ -17,6 +18,7 @@ import {
 import {
   createMatrixFromSeed,
   createNewMatrix,
+  normalizeGridSize,
 } from "../lib/scm";
 import {
   MAX_TOTAL_PAYLOAD_BYTES,
@@ -67,6 +69,7 @@ export const DEFAULT_DESIGN: DesignState = {
   showTrajectory: true,
   contrastGuard: false,
   autoRotate: false,
+  faceCodeMode: "auto",
 };
 
 export const GUEST_DESIGN: DesignState = {
@@ -130,6 +133,8 @@ export interface StudioState {
   speed: number;
   timeRef: { current: number };
   activeTab: StudioTab;
+  gridChoice: GridSizeOption;
+  sidebarCollapsed: boolean;
   toast: ToastState | null;
   drafts: PayloadDraftItem[];
   sealedStats: SealedStats | null;
@@ -152,6 +157,8 @@ export interface StudioState {
   restartTimeline: () => void;
   setSpeed: (speed: number) => void;
   setTab: (tab: StudioTab) => void;
+  setGridChoice: (choice: GridSizeOption) => void;
+  toggleSidebar: () => void;
   notify: (message: string, tone?: ToastTone) => void;
   dismissToast: () => void;
   addTextDraft: (text: string) => void;
@@ -218,6 +225,24 @@ function statsFromManifest(manifest: SCMPayloadManifest): SealedStats {
   };
 }
 
+export function autoGridSizeForDrafts(drafts: PayloadDraftItem[]): number {
+  const total = drafts.reduce((sum, draft) => sum + draft.size, 0);
+  if (total <= 512 * 1024) return 9;
+  if (total <= 2 * 1024 * 1024) return 12;
+  if (total <= 8 * 1024 * 1024) return 15;
+  if (total <= 24 * 1024 * 1024) return 18;
+  return 21;
+}
+
+export function resolveGridSize(
+  choice: GridSizeOption,
+  drafts: PayloadDraftItem[],
+): number {
+  return choice === "auto"
+    ? autoGridSizeForDrafts(drafts)
+    : normalizeGridSize(Number(choice));
+}
+
 export const useStudio = create<StudioState>((set, get) => ({
   matrix: initialMatrix,
   token: "",
@@ -232,6 +257,8 @@ export const useStudio = create<StudioState>((set, get) => ({
   speed: 1,
   timeRef: { current: 0 },
   activeTab: "design",
+  gridChoice: "auto",
+  sidebarCollapsed: false,
   toast: null,
   drafts: [],
   sealedStats: null,
@@ -313,6 +340,11 @@ export const useStudio = create<StudioState>((set, get) => ({
   setSpeed: (speed) => set({ speed: Math.min(3, Math.max(0.1, speed)) }),
 
   setTab: (tab) => set({ activeTab: tab }),
+
+  setGridChoice: (gridChoice) => set({ gridChoice }),
+
+  toggleSidebar: () =>
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
   notify: (message, tone = "info") => {
     const id = Date.now();
@@ -399,7 +431,12 @@ export const useStudio = create<StudioState>((set, get) => ({
     }
     set({ tokenStatus: "syncing", tokenError: null });
     try {
-      const artifacts: SealArtifacts = await sealVault(drafts, label ?? matrix.label);
+      const gridSize = resolveGridSize(get().gridChoice, drafts);
+      const artifacts: SealArtifacts = await sealVault(
+        drafts,
+        label ?? matrix.label,
+        gridSize,
+      );
       const previous = sealedVersionFrom(token, shapeToken, packageBlob);
       get().timeRef.current = 0;
       set({
@@ -590,7 +627,8 @@ export const useStudio = create<StudioState>((set, get) => ({
         });
       }
     }
-    const matrix = createNewMatrix(label?.trim() || "Untitled SCM");
+    const gridSize = resolveGridSize(get().gridChoice, []);
+    const matrix = createNewMatrix(label?.trim() || "Untitled SCM", gridSize);
     const empty = await createEmptyVault(matrix);
     get().timeRef.current = 0;
     set({

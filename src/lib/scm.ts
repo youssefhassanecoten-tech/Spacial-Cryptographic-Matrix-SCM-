@@ -6,46 +6,72 @@ import type {
   SCMTokenPayload,
   Vec3,
 } from "../types";
-import { GRID_HALF, GRID_SIZE, VOXEL_COUNT } from "../types";
+import {
+  DEFAULT_GRID_SIZE,
+  MAX_GRID_SIZE,
+  MIN_GRID_SIZE,
+} from "../types";
 import { hashCell, mulberry32, randomId, randomSeed, seededShuffle } from "./rng";
 
-export function voxelIndex(x: number, y: number, z: number): number {
-  return (z * GRID_SIZE + y) * GRID_SIZE + x;
+export function normalizeGridSize(value = DEFAULT_GRID_SIZE): number {
+  const integer = Math.min(MAX_GRID_SIZE, Math.max(MIN_GRID_SIZE, Math.round(value)));
+  return Math.max(
+    MIN_GRID_SIZE,
+    Math.min(MAX_GRID_SIZE, Math.round(integer / 3) * 3),
+  );
 }
 
-export function indexToCoord(index: number): Vec3 {
-  const x = index % GRID_SIZE;
-  const y = Math.floor(index / GRID_SIZE) % GRID_SIZE;
-  const z = Math.floor(index / (GRID_SIZE * GRID_SIZE));
+export function worldSpacing(gridSize: number): number {
+  return 8.8 / Math.max(1, gridSize - 0.2);
+}
+
+export function voxelIndex(
+  x: number,
+  y: number,
+  z: number,
+  gridSize = DEFAULT_GRID_SIZE,
+): number {
+  return (z * gridSize + y) * gridSize + x;
+}
+
+export function indexToCoord(index: number, gridSize = DEFAULT_GRID_SIZE): Vec3 {
+  const x = index % gridSize;
+  const y = Math.floor(index / gridSize) % gridSize;
+  const z = Math.floor(index / (gridSize * gridSize));
   return [x, y, z];
 }
 
-export function isInBounds(coord: Vec3): boolean {
-  return coord.every((value) => Number.isInteger(value) && value >= 0 && value < GRID_SIZE);
+export function isInBounds(coord: Vec3, gridSize = DEFAULT_GRID_SIZE): boolean {
+  return coord.every(
+    (value) => Number.isInteger(value) && value >= 0 && value < gridSize,
+  );
 }
 
-const ANCHOR_CANDIDATES: Vec3[] = [
-  [0, 0, 0],
-  [8, 0, 0],
-  [0, 8, 0],
-  [8, 8, 0],
-  [0, 0, 8],
-  [8, 0, 8],
-  [0, 8, 8],
-  [8, 8, 8],
-  [4, 0, 4],
-  [4, 8, 4],
-  [0, 4, 4],
-  [8, 4, 4],
-  [4, 4, 0],
-  [4, 4, 8],
-  [4, 4, 4],
-];
+function anchorCandidates(gridSize: number): Vec3[] {
+  const max = gridSize - 1;
+  const mid = Math.floor(max / 2);
+  const candidates: Vec3[] = [];
+  for (const x of [0, max]) {
+    for (const y of [0, max]) {
+      for (const z of [0, max]) {
+        candidates.push([x, y, z]);
+      }
+    }
+  }
+  candidates.push([mid, 0, mid], [mid, max, mid]);
+  candidates.push([0, mid, mid], [max, mid, mid]);
+  candidates.push([mid, mid, 0], [mid, mid, max]);
+  candidates.push([mid, mid, mid]);
+  return candidates;
+}
 
 const ANCHOR_LABELS = ["Anchor A", "Anchor B", "Anchor C"];
 
-export function deriveAnchors(seed: number): SCMAnchor[] {
-  const shuffled = seededShuffle(ANCHOR_CANDIDATES, seed ^ 0xa5a5a5a5);
+export function deriveAnchors(
+  seed: number,
+  gridSize = DEFAULT_GRID_SIZE,
+): SCMAnchor[] {
+  const shuffled = seededShuffle(anchorCandidates(gridSize), seed ^ 0xa5a5a5a5);
   return shuffled.slice(0, 3).map((coord, index) => ({
     id: index,
     label: ANCHOR_LABELS[index],
@@ -53,13 +79,16 @@ export function deriveAnchors(seed: number): SCMAnchor[] {
   }));
 }
 
-export function buildAlignmentPath(anchors: SCMAnchor[]): number[] {
+export function buildAlignmentPath(
+  anchors: SCMAnchor[],
+  gridSize = DEFAULT_GRID_SIZE,
+): number[] {
   if (anchors.length === 0) {
     return [];
   }
   const path: number[] = [];
   const push = (coord: Vec3) => {
-    const index = voxelIndex(coord[0], coord[1], coord[2]);
+    const index = voxelIndex(coord[0], coord[1], coord[2], gridSize);
     if (path[path.length - 1] !== index) {
       path.push(index);
     }
@@ -80,18 +109,19 @@ export function buildAlignmentPath(anchors: SCMAnchor[]): number[] {
   return path;
 }
 
-function ensureBlockFloor(bits: Uint8Array, seed: number): void {
+function ensureBlockFloor(bits: Uint8Array, seed: number, gridSize: number): void {
   const rng = mulberry32(seed ^ 0x1b56c4e9);
-  for (let bz = 0; bz < 3; bz += 1) {
-    for (let by = 0; by < 3; by += 1) {
-      for (let bx = 0; bx < 3; bx += 1) {
+  const blocksPerAxis = Math.floor(gridSize / 3);
+  for (let bz = 0; bz < blocksPerAxis; bz += 1) {
+    for (let by = 0; by < blocksPerAxis; by += 1) {
+      for (let bx = 0; bx < blocksPerAxis; bx += 1) {
         const cells: Vec3[] = [];
         let active = 0;
         for (let z = 0; z < 3; z += 1) {
           for (let y = 0; y < 3; y += 1) {
             for (let x = 0; x < 3; x += 1) {
               const coord: Vec3 = [bx * 3 + x, by * 3 + y, bz * 3 + z];
-              const index = voxelIndex(coord[0], coord[1], coord[2]);
+              const index = voxelIndex(coord[0], coord[1], coord[2], gridSize);
               if (bits[index]) {
                 active += 1;
               } else {
@@ -105,7 +135,7 @@ function ensureBlockFloor(bits: Uint8Array, seed: number): void {
           guard += 1;
           const pick = Math.floor(rng() * cells.length);
           const [coord] = cells.splice(pick, 1);
-          const index = voxelIndex(coord[0], coord[1], coord[2]);
+          const index = voxelIndex(coord[0], coord[1], coord[2], gridSize);
           bits[index] = 1;
           active += 1;
         }
@@ -118,58 +148,64 @@ export function createMatrixFromSeed(
   seed: number,
   meta: { id: string; label: string; createdAt: string },
   anchorsInput?: Vec3[],
+  gridSizeInput = DEFAULT_GRID_SIZE,
 ): SCMMatrix {
   const normalizedSeed = seed >>> 0;
+  const gridSize = normalizeGridSize(gridSizeInput);
+  const voxelCount = gridSize ** 3;
+  const half = (gridSize - 1) / 2;
   const anchors: SCMAnchor[] = anchorsInput
     ? anchorsInput.map((coord, index) => ({
         id: index,
         label: ANCHOR_LABELS[index] ?? `Anchor ${index + 1}`,
         coord: [...coord] as Vec3,
       }))
-    : deriveAnchors(normalizedSeed);
+    : deriveAnchors(normalizedSeed, gridSize);
 
-  const bits = new Uint8Array(VOXEL_COUNT);
+  const bits = new Uint8Array(voxelCount);
   const rng = mulberry32(normalizedSeed ^ 0x9e3779b9);
-  for (let z = 0; z < GRID_SIZE; z += 1) {
-    for (let y = 0; y < GRID_SIZE; y += 1) {
-      for (let x = 0; x < GRID_SIZE; x += 1) {
-        const dx = x - GRID_HALF;
-        const dy = y - GRID_HALF;
-        const dz = z - GRID_HALF;
+  for (let z = 0; z < gridSize; z += 1) {
+    for (let y = 0; y < gridSize; y += 1) {
+      for (let x = 0; x < gridSize; x += 1) {
+        const dx = x - half;
+        const dy = y - half;
+        const dz = z - half;
         const distanceNorm =
-          Math.sqrt(dx * dx + dy * dy + dz * dz) / (Math.sqrt(3) * GRID_HALF);
+          Math.sqrt(dx * dx + dy * dy + dz * dz) /
+          (Math.sqrt(3) * Math.max(half, 1));
         const probability = 0.27 + distanceNorm * 0.13;
         if (rng() < probability) {
-          bits[voxelIndex(x, y, z)] = 1;
+          bits[voxelIndex(x, y, z, gridSize)] = 1;
         }
       }
     }
   }
 
-  for (let bz = 0; bz < 3; bz += 1) {
-    for (let by = 0; by < 3; by += 1) {
-      for (let bx = 0; bx < 3; bx += 1) {
-        bits[voxelIndex(bx * 3 + 1, by * 3 + 1, bz * 3 + 1)] = 1;
+  const blocksPerAxis = Math.floor(gridSize / 3);
+  for (let bz = 0; bz < blocksPerAxis; bz += 1) {
+    for (let by = 0; by < blocksPerAxis; by += 1) {
+      for (let bx = 0; bx < blocksPerAxis; bx += 1) {
+        bits[voxelIndex(bx * 3 + 1, by * 3 + 1, bz * 3 + 1, gridSize)] = 1;
       }
     }
   }
 
-  ensureBlockFloor(bits, normalizedSeed);
+  ensureBlockFloor(bits, normalizedSeed, gridSize);
 
   for (const anchor of anchors) {
-    if (isInBounds(anchor.coord)) {
-      bits[voxelIndex(anchor.coord[0], anchor.coord[1], anchor.coord[2])] = 1;
+    if (isInBounds(anchor.coord, gridSize)) {
+      bits[voxelIndex(anchor.coord[0], anchor.coord[1], anchor.coord[2], gridSize)] = 1;
     }
   }
 
-  const path = buildAlignmentPath(anchors);
+  const path = buildAlignmentPath(anchors, gridSize);
   for (const index of path) {
     bits[index] = 1;
   }
 
-  const indices = Array.from({ length: VOXEL_COUNT }, (_, index) => index);
+  const indices = Array.from({ length: voxelCount }, (_, index) => index);
   const order = seededShuffle(indices, normalizedSeed ^ 0x51ed270b);
-  const orderRank = new Uint16Array(VOXEL_COUNT);
+  const orderRank = new Uint16Array(voxelCount);
   order.forEach((index, rank) => {
     orderRank[index] = rank;
   });
@@ -184,6 +220,8 @@ export function createMatrixFromSeed(
     seed: normalizedSeed,
     label: meta.label,
     createdAt: meta.createdAt,
+    gridSize,
+    voxelCount,
     bits,
     anchors,
     path,
@@ -193,13 +231,21 @@ export function createMatrixFromSeed(
   };
 }
 
-export function createNewMatrix(label = "Untitled Lattice"): SCMMatrix {
+export function createNewMatrix(
+  label = "Untitled Lattice",
+  gridSize = DEFAULT_GRID_SIZE,
+): SCMMatrix {
   const seed = randomSeed();
-  return createMatrixFromSeed(seed, {
-    id: randomId(),
-    label,
-    createdAt: new Date().toISOString(),
-  });
+  return createMatrixFromSeed(
+    seed,
+    {
+      id: randomId(),
+      label,
+      createdAt: new Date().toISOString(),
+    },
+    undefined,
+    gridSize,
+  );
 }
 
 export function matrixToPayload(
@@ -218,6 +264,7 @@ export function matrixToPayload(
     seed: matrix.seed,
     label: matrix.label,
     createdAt: matrix.createdAt,
+    gridSize: matrix.gridSize,
     anchors: matrix.anchors.map((anchor) => [...anchor.coord] as Vec3),
     ...(payload ? { payload } : {}),
     ...(extra?.shapeId ? { shapeId: extra.shapeId } : {}),
@@ -236,19 +283,30 @@ export function matrixFromPayload(payload: SCMTokenPayload): SCMMatrix {
       createdAt: payload.createdAt,
     },
     payload.anchors,
+    payload.gridSize ?? DEFAULT_GRID_SIZE,
   );
 }
 
-export function coordToWorld(coord: Vec3, spacing = 1): Vec3 {
+export function coordToWorld(
+  coord: Vec3,
+  gridSize = DEFAULT_GRID_SIZE,
+  spacing = worldSpacing(gridSize),
+): Vec3 {
+  const half = (normalizeGridSize(gridSize) - 1) / 2;
   return [
-    (coord[0] - GRID_HALF) * spacing,
-    (coord[1] - GRID_HALF) * spacing,
-    (coord[2] - GRID_HALF) * spacing,
+    (coord[0] - half) * spacing,
+    (coord[1] - half) * spacing,
+    (coord[2] - half) * spacing,
   ];
 }
 
-export function anchorPhysicalCenters(matrix: SCMMatrix, spacing = 1): Vec3[] {
-  return matrix.anchors.map((anchor) => coordToWorld(anchor.coord, spacing));
+export function anchorPhysicalCenters(
+  matrix: SCMMatrix,
+  spacing = worldSpacing(matrix.gridSize),
+): Vec3[] {
+  return matrix.anchors.map((anchor) =>
+    coordToWorld(anchor.coord, matrix.gridSize, spacing),
+  );
 }
 
 export function stableHash(values: Array<number | string>): string {
@@ -275,20 +333,21 @@ export function stableHash(values: Array<number | string>): string {
 }
 
 export function bitstreamSignature(matrix: SCMMatrix): string {
-  return stableHash([matrix.seed, ...Array.from(matrix.bits)]);
+  return stableHash([matrix.seed, matrix.gridSize, ...Array.from(matrix.bits)]);
 }
 
 export function alignmentSignature(matrix: SCMMatrix): string {
   return stableHash([
     matrix.id,
     matrix.seed,
+    matrix.gridSize,
     ...matrix.anchors.flatMap((anchor) => anchor.coord),
     ...matrix.path,
   ]);
 }
 
 export function executionSignature(matrix: SCMMatrix): string {
-  return stableHash([...matrix.order]);
+  return stableHash([matrix.gridSize, ...matrix.order]);
 }
 
 export function anchorCenterSignature(matrix: SCMMatrix, spacing = 1): string {
@@ -297,6 +356,7 @@ export function anchorCenterSignature(matrix: SCMMatrix, spacing = 1): string {
 
 export function matrixSignature(matrix: SCMMatrix): string {
   return stableHash([
+    matrix.gridSize,
     bitstreamSignature(matrix),
     alignmentSignature(matrix),
     executionSignature(matrix),
@@ -306,25 +366,27 @@ export function matrixSignature(matrix: SCMMatrix): string {
 export function neighborCount(matrix: SCMMatrix, coord: Vec3): number {
   let count = 0;
   const [x, y, z] = coord;
-  if (x > 0 && matrix.bits[voxelIndex(x - 1, y, z)]) count += 1;
-  if (x < GRID_SIZE - 1 && matrix.bits[voxelIndex(x + 1, y, z)]) count += 1;
-  if (y > 0 && matrix.bits[voxelIndex(x, y - 1, z)]) count += 1;
-  if (y < GRID_SIZE - 1 && matrix.bits[voxelIndex(x, y + 1, z)]) count += 1;
-  if (z > 0 && matrix.bits[voxelIndex(x, y, z - 1)]) count += 1;
-  if (z < GRID_SIZE - 1 && matrix.bits[voxelIndex(x, y, z + 1)]) count += 1;
+  const gridSize = matrix.gridSize;
+  if (x > 0 && matrix.bits[voxelIndex(x - 1, y, z, gridSize)]) count += 1;
+  if (x < gridSize - 1 && matrix.bits[voxelIndex(x + 1, y, z, gridSize)]) count += 1;
+  if (y > 0 && matrix.bits[voxelIndex(x, y - 1, z, gridSize)]) count += 1;
+  if (y < gridSize - 1 && matrix.bits[voxelIndex(x, y + 1, z, gridSize)]) count += 1;
+  if (z > 0 && matrix.bits[voxelIndex(x, y, z - 1, gridSize)]) count += 1;
+  if (z < gridSize - 1 && matrix.bits[voxelIndex(x, y, z + 1, gridSize)]) count += 1;
   return count;
 }
 
 export function contrastScores(matrix: SCMMatrix): Float32Array {
-  const scores = new Float32Array(VOXEL_COUNT);
-  for (let index = 0; index < VOXEL_COUNT; index += 1) {
+  const scores = new Float32Array(matrix.voxelCount);
+  for (let index = 0; index < matrix.voxelCount; index += 1) {
     if (!matrix.bits[index]) {
       scores[index] = 1;
       continue;
     }
-    const coord = indexToCoord(index);
+    const coord = indexToCoord(index, matrix.gridSize);
     const exposed = 6 - neighborCount(matrix, coord);
-    const jitter = (hashCell(matrix.seed, coord[0], coord[1], coord[2]) / 0xffffffff) * 0.12;
+    const jitter =
+      (hashCell(matrix.seed, coord[0], coord[1], coord[2]) / 0xffffffff) * 0.12;
     scores[index] = Math.min(1, exposed / 6 + jitter);
   }
   return scores;
@@ -336,6 +398,7 @@ export function matrixChecksum(matrix: SCMMatrix): string {
     matrix.seed,
     matrix.label,
     matrix.createdAt,
+    matrix.gridSize,
     ...matrix.anchors.flatMap((anchor) => anchor.coord),
   ]);
 }

@@ -11,24 +11,34 @@ SCM Studio is the local-first renderer, studio, encrypted payload vault, verific
 ## How the sealed workflow works
 
 1. **Compose** any combination of text items, images, video, folders, PDFs, and documents.
-2. **Seal** the vault. The content root and a fresh salt derive a new matrix seed, matrix ID, shape, and token. The cube visibly reshapes.
-3. **Content disappears** from the studio. Only the encrypted private ID token and the encrypted `.scm` package remain.
-4. **Decrypt** by opening the Decrypt tab and pasting the private ID token. File items also need the matching `.scm` package. A solved-matrix explosion reveals the content.
-5. **Edit Studio** is gated by the private ID token. Add, remove, or edit items, then re-seal to mint a new shape and token.
+2. **Choose the lattice scale** or let Auto grow it from 9³ up to 21³ based on payload size. 3³ and 6³ are manual mini modes.
+3. **Seal** the vault. The content root and a fresh salt derive a new matrix seed, matrix ID, shape, and token. The cube visibly reshapes.
+4. **Content disappears** from the studio. Only the encrypted private ID token and the encrypted `.scm` package remain.
+5. **Decrypt** by opening the Decrypt tab and pasting the private ID token. File items also need the matching `.scm` package. A solved-matrix explosion reveals the content.
+6. **Edit Studio** is gated by the private ID token. Add, remove, or edit items, then re-seal to mint a new shape and token.
 
 Offline encryption cannot revoke an old token. A re-seal archives the previous version locally, but any external copy of the old token and package still decrypts the old content.
+
+## Scalable lattice and face codes
+
+Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³**.
+
+- **Auto** keeps 9³ for small payloads and grows to 12³, 15³, 18³, then 21³ as the package grows toward 64 MB.
+- **3³ and 6³** are manual mini modes.
+- **Face codes:** auto mode puts a maze micro-code on every active cube below 9³, and sparse anchor-path markers at 9³ and above. The Design tab can force all faces or turn them off.
+- Each marker is a content-derived maze shard rendered on one cube face. Full content remains in the private token and `.scm` package; the face layer is a distributed visual data surface, not a replacement for the package.
 
 ## QR and guest mode
 
 - The QR contains a **public shape token** (`SCMS1`) and never the private ID token.
-- Scanning opens a guest viewer with the exact 3D shape and animation only.
+- Scanning opens a guest viewer with the exact 3D shape, lattice scale, and animation only.
 - The guest page exposes one **Input Token** window. Content stays locked until the private `SCM1` token is pasted and, for files, the `.scm` package is loaded.
 - The private token is shared separately from the QR.
 
 ## Features
 
 ### Cryptographic core
-- Deterministic 9×9×9 matrix built from a seeded PRNG
+- Deterministic 3³–21³ matrix built from a seeded PRNG
 - Three hidden alignment anchors and a carved Manhattan path
 - Content-derived matrix seed: any add, remove, rename, or edit reshapes the matrix and changes the token
 - Public shape tokens (`SCMS1`) and AES-GCM private tokens (`SCM1`)
@@ -45,6 +55,7 @@ Offline encryption cannot revoke an old token. A re-seal archives the previous v
 - Linear-Z and radial 3D gradients with eight palettes
 - Contrast guard, alignment anchors, macro-block cage, and token trajectory overlays
 - Reorderable cascade timeline: explode, layer wave, pulse, glow, and scanline
+- Clickable home logo and collapsible studio sidebar
 
 ### Multi-item payload vault
 - Text, images, video, documents, and whole folders in one SCM
@@ -60,12 +71,13 @@ Offline encryption cannot revoke an old token. A re-seal archives the previous v
 - Public shape QR PNG/SVG and SCM digital shape card PNG
 - Private ID token save and encrypted `.scm` package download
 
-## Payload limits
+## Payload and lattice limits
 
 - Maximum total payload: 64 MB per SCM
 - Text item that can embed in the token: 2 KB
 - Total embedded text per token: 4 KB
 - Larger text and all files go into the encrypted `.scm` package
+- Lattice limit: 21³ = 9,261 voxels. This is deliberately the practical upper bound for smooth rendering on phones; 21³ is supported, but 3³–12³ will be lighter.
 
 ## Development
 
@@ -87,19 +99,19 @@ npm.cmd run build
 npm.cmd run preview
 ```
 
-## Web deployment
-
-The `gh-pages` branch contains the production build. GitHub Pages serves it at the URL above. To rebuild for a project path:
+## Windows desktop app
 
 ```powershell
-$env:VITE_BASE_PATH="/Spacial-Cryptographic-Matrix-SCM-/"
-$env:VITE_PUBLIC_APP_URL="https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/"
-npm.cmd run build
+npm.cmd run dist:win
 ```
 
-## Android
+Output: `release-electron/SCM-Studio-Portable-1.2.0.exe`
 
-The native shell lives in `android/` and is built with Capacitor 8.
+Local copy: `release/SCM-Studio-Portable-1.2.0.exe`.
+
+The portable Windows executable is unsigned, so Windows SmartScreen may warn on first launch. The app loads through a secure `scm://` protocol with Web Crypto enabled.
+
+## Android
 
 ```powershell
 $env:VITE_BASE_PATH="/"
@@ -110,12 +122,40 @@ cd android
 .\gradlew.bat assembleRelease
 ```
 
-Outputs:
+Output: `android/app/build/outputs/apk/release/app-release.apk`
 
-- `android/app/build/outputs/apk/release/app-release.apk`
-- `release/SCM-Studio-1.1.0.apk` (local copy)
+The release APK is signed with the local keystore in `android/keystore/`. That folder and all build outputs are gitignored.
 
-The release APK is signed with the local keystore in `android/keystore/`. That folder, `local.properties`, and all build outputs are gitignored. Keep the keystore safe for future updates.
+## iOS
+
+The Capacitor iOS project lives in `ios/`. It can be opened and built on macOS with Xcode:
+
+```bash
+npm run build
+npx cap sync ios
+npx cap open ios
+```
+
+A signed `.ipa` requires macOS, Xcode, an Apple Developer account, and provisioning profiles. This Windows environment can generate and commit the project but cannot produce or sign an iOS build. The PWA is already usable on iPhone via Safari → Add to Home Screen.
+
+## SCM Chat / SCMC
+
+SCM Chat is intentionally deferred until the server phase. A Raspberry Pi can host it:
+
+- Pi 4/5 with 2 GB+ RAM, Node.js, and a WebSocket service
+- HTTPS through Cloudflare Tunnel or Caddy/nginx with a certificate
+- The Pi relays ciphertext and session/token rotation messages; it should never receive plaintext
+- Token rotation per message means a snapshot exported at moment A stays readable with token A, while the live room moves to token B. Old token A cannot read messages after B, but it still decrypts the exported snapshot A.
+
+## Web deployment
+
+The `gh-pages` branch contains the production build. GitHub Pages serves it at the URL above.
+
+```powershell
+$env:VITE_BASE_PATH="/Spacial-Cryptographic-Matrix-SCM-/"
+$env:VITE_PUBLIC_APP_URL="https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/"
+npm.cmd run build
+```
 
 ## License
 

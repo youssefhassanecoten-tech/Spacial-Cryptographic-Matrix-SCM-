@@ -23,3 +23,14 @@ android/*.log
 *.apk
 *.aab
 release
+release-electron
+electron-build.log
+*.zip
+*.dmg
+*.AppImage
+ios/App/App/public
+ios/App/App/capacitor.config.json
+ios/App/Pods
+ios/App/build
+ios/DerivedData
+ios/xcuserdata

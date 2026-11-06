@@ -5,7 +5,6 @@ import type {
   TrajectoryResult,
   VerificationResult,
 } from "../types";
-import { VOXEL_COUNT } from "../types";
 import { useStudio } from "../store/useStudio";
 import { decryptToken } from "./crypto";
 import { PATTERN_TYPES } from "./patterns";
@@ -163,7 +162,7 @@ export async function runTestE(): Promise<VerificationResult> {
       "anchor center hash": before.anchors,
       "alignment hash": before.alignment,
       "execution hash": before.execution,
-      "active voxels": `${before.active}/${VOXEL_COUNT}`,
+      "active voxels": `${before.active}/${useStudio.getState().matrix.voxelCount}`,
     },
     durationMs,
   };

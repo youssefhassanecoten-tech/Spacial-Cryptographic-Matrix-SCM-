@@ -20,6 +20,7 @@ import {
   createMatrixFromSeed,
   deriveAnchors,
   matrixToPayload,
+  normalizeGridSize,
   stableHash,
 } from "./scm";
 import { randomId } from "./rng";
@@ -238,15 +239,27 @@ export async function deriveSeedFromContent(
 export async function deriveMatrixId(
   salt: string,
   contentRoot: string,
+  gridSize: number,
 ): Promise<string> {
   const digest = await sha256Hex(
-    textEncoder.encode(`scm-id-v2:${salt}:${contentRoot}`),
+    textEncoder.encode(`scm-id-v2:${salt}:${contentRoot}:${gridSize}`),
   );
   return `scm_${digest.slice(0, 12)}`;
 }
 
-export function shapeIdFor(id: string, seed: number, anchors: Vec3[]): string {
-  return stableHash(["scm-shape-v1", id, seed, ...anchors.flat()]);
+export function shapeIdFor(
+  id: string,
+  seed: number,
+  anchors: Vec3[],
+  gridSize: number,
+): string {
+  return stableHash([
+    "scm-shape-v2",
+    id,
+    seed,
+    gridSize,
+    ...anchors.flat(),
+  ]);
 }
 
 export function createShapePayload(matrix: SCMMatrix): SCMShapePayload {
@@ -258,13 +271,15 @@ export function createShapePayload(matrix: SCMMatrix): SCMShapePayload {
     seed: matrix.seed,
     label: matrix.label,
     createdAt: matrix.createdAt,
+    gridSize: matrix.gridSize,
     anchors,
-    shapeId: shapeIdFor(matrix.id, matrix.seed, anchors),
+    shapeId: shapeIdFor(matrix.id, matrix.seed, anchors, matrix.gridSize),
   };
 }
 
 export function shapeFromPrivateToken(payload: SCMTokenPayload): SCMShapePayload {
   const anchors = payload.anchors.map((anchor) => [...anchor] as Vec3);
+  const gridSize = normalizeGridSize(payload.gridSize ?? 9);
   return {
     v: 1,
     kind: "shape",
@@ -272,8 +287,9 @@ export function shapeFromPrivateToken(payload: SCMTokenPayload): SCMShapePayload
     seed: payload.seed,
     label: payload.label,
     createdAt: payload.createdAt,
+    gridSize,
     anchors,
-    shapeId: shapeIdFor(payload.id, payload.seed, anchors),
+    shapeId: shapeIdFor(payload.id, payload.seed, anchors, gridSize),
   };
 }
 
@@ -301,16 +317,21 @@ export function decodeShapeToken(token: string): SCMShapePayload {
     parsed.kind !== "shape" ||
     typeof parsed.id !== "string" ||
     typeof parsed.seed !== "number" ||
+    typeof parsed.gridSize !== "number" ||
     !Array.isArray(parsed.anchors) ||
     parsed.anchors.length !== 3
   ) {
     throw new Error("SCM shape token is incomplete.");
   }
+  parsed.gridSize = normalizeGridSize(parsed.gridSize);
   for (const anchor of parsed.anchors) {
     if (
       !Array.isArray(anchor) ||
       anchor.length !== 3 ||
-      anchor.some((value) => !Number.isInteger(value) || value < 0 || value > 8)
+      anchor.some(
+        (value) =>
+          !Number.isInteger(value) || value < 0 || value >= parsed.gridSize,
+      )
     ) {
       throw new Error("SCM shape token has an invalid anchor.");
     }
@@ -319,6 +340,7 @@ export function decodeShapeToken(token: string): SCMShapePayload {
     parsed.id,
     parsed.seed >>> 0,
     parsed.anchors.map((anchor) => [...anchor] as Vec3),
+    parsed.gridSize,
   );
   if (parsed.shapeId !== expected) {
     throw new Error("SCM shape token integrity check failed.");
@@ -355,6 +377,7 @@ export function matrixFromShape(shape: SCMShapePayload): SCMMatrix {
       createdAt: shape.createdAt,
     },
     shape.anchors,
+    shape.gridSize,
   );
 }
 
@@ -546,20 +569,25 @@ export async function parsePackage(
 export async function sealVault(
   drafts: PayloadDraftItem[],
   label: string,
+  gridSizeInput = 9,
 ): Promise<SealArtifacts> {
   if (drafts.length === 0) {
     throw new Error("Add at least one text or file item before sealing.");
   }
   const { manifest, packageDrafts } = await buildManifest(drafts);
   const salt = randomSalt();
+  const gridSize = normalizeGridSize(gridSizeInput);
   const seed = await deriveSeedFromContent(salt, manifest.contentRoot);
-  const id = await deriveMatrixId(salt, manifest.contentRoot);
+  const id = await deriveMatrixId(salt, manifest.contentRoot, gridSize);
   const createdAt = new Date().toISOString();
-  const anchors = deriveAnchors(seed).map((anchor) => [...anchor.coord] as Vec3);
+  const anchors = deriveAnchors(seed, gridSize).map(
+    (anchor) => [...anchor.coord] as Vec3,
+  );
   const matrix = createMatrixFromSeed(
     seed,
     { id, label: label.trim() || "Sealed SCM", createdAt },
     anchors,
+    gridSize,
   );
   const shape = createShapePayload(matrix);
   const payload = privatePayloadFor(
@@ -641,6 +669,7 @@ export async function unlockVault(options: {
       if (
         shape.id !== expected.id ||
         shape.seed !== expected.seed ||
+        shape.gridSize !== expected.gridSize ||
         shape.shapeId !== expected.shapeId ||
         JSON.stringify(shape.anchors) !== JSON.stringify(expected.anchors)
       ) {

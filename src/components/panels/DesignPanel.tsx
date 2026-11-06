@@ -26,6 +26,7 @@ import {
   Radar,
   Rotate3D,
   Route,
+  ScanLine,
   ShieldAlert,
   Sparkles,
   Waypoints,
@@ -38,7 +39,6 @@ import type {
   PatternType,
   ShapeType,
 } from "../../types";
-import { VOXEL_COUNT } from "../../types";
 import { PALETTES } from "../../lib/palettes";
 import { PATTERN_HINTS, PATTERN_LABELS, PATTERN_TYPES } from "../../lib/patterns";
 import { SHAPE_HINTS, SHAPE_LABELS, SHAPE_TYPES } from "../../lib/shapes";
@@ -93,7 +93,7 @@ export function DesignPanel() {
   const design = useStudio((state) => state.design);
   const matrix = useStudio((state) => state.matrix);
   const setDesign = useStudio((state) => state.setDesign);
-  const centers = anchorPhysicalCenters(matrix, 1);
+  const centers = anchorPhysicalCenters(matrix);
 
   return (
     <div className="space-y-3">
@@ -373,6 +373,32 @@ export function DesignPanel() {
       </PanelSection>
 
       <PanelSection
+        icon={<ScanLine className="h-3.5 w-3.5" />}
+        title="Face Codes"
+        hint="Maze micro-codes stamped on cube faces. Auto uses every active cube below 9³ and sparse anchor-path markers from 9³ upward."
+        action={
+          <Badge tone={design.faceCodeMode === "off" ? "slate" : "cyan"}>
+            {design.faceCodeMode}
+          </Badge>
+        }
+      >
+        <Segmented
+          value={design.faceCodeMode}
+          onChange={(faceCodeMode) => setDesign({ faceCodeMode })}
+          options={[
+            { value: "auto", label: "Auto" },
+            { value: "all", label: "All faces" },
+            { value: "off", label: "Off" },
+          ]}
+        />
+        <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+          Each marker is a content-derived maze shard. The full payload stays in the
+          encrypted token and .scm package; the face layer adds a distributed visual
+          data surface.
+        </p>
+      </PanelSection>
+
+      <PanelSection
         icon={<Lock className="h-3.5 w-3.5" />}
         title="Alignment Lock"
         hint="Anchor coordinates and physical centers are immutable under render customization."
@@ -398,7 +424,7 @@ export function DesignPanel() {
         <div className="mt-2">
           <StatRow
             label="Active voxels"
-            value={`${matrix.activeCount} / ${VOXEL_COUNT}`}
+            value={`${matrix.activeCount} / ${matrix.voxelCount}`}
             tone="cyan"
           />
           <StatRow label="Alignment path" value={`${matrix.path.length} cells`} />

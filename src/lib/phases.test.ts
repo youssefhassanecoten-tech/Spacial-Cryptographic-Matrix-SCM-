@@ -76,7 +76,7 @@ describe("Phase 1-2 cryptographic matrix core", () => {
   });
 
   it("carves a connected alignment path through active voxels", () => {
-    const coords = matrix.path.map(indexToCoord);
+    const coords = matrix.path.map((index) => indexToCoord(index, matrix.gridSize));
     expect(matrix.path.every((index) => matrix.bits[index] === 1)).toBe(true);
     for (let i = 0; i < coords.length - 1; i += 1) {
       expect(manhattanAdjacent(coords[i], coords[i + 1])).toBe(true);
@@ -149,7 +149,7 @@ describe("Phase 4 visual engine", () => {
     const scratch = { offsetX: 0, offsetY: 0, offsetZ: 0, scale: 1, glow: 1 };
     const before = bitstreamSignature(matrix);
     const index = matrix.order[0];
-    const coord = indexToCoord(index);
+    const coord = indexToCoord(index, matrix.gridSize);
     const voxel = { index, x: coord[0], y: coord[1], z: coord[2] };
     const layers = [
       {
@@ -355,5 +355,50 @@ describe("Phase 6 sealed multi-item vault", () => {
     const oldText = oldUnlock.items?.find((item) => item.kind === "text");
     expect(await oldText?.blob?.text()).toBe("old secret");
     expect(second.token).not.toBe(first.token);
+  });
+});
+
+describe("Phase 7 scalable lattice", () => {
+  it("supports 3� through 21� matrices", () => {
+    for (const gridSize of [3, 6, 9, 12, 15, 18, 21]) {
+      const scaled = createMatrixFromSeed(SEED, META, undefined, gridSize);
+      expect(scaled.gridSize).toBe(gridSize);
+      expect(scaled.voxelCount).toBe(gridSize ** 3);
+      expect(scaled.bits.length).toBe(gridSize ** 3);
+      expect(scaled.order.length).toBe(gridSize ** 3);
+      expect(scaled.anchors.every((anchor) => anchor.coord.every((c) => c < gridSize))).toBe(true);
+      expect(scaled.path.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("seals a 21� matrix and emits 21�21 face maps", async () => {
+    const artifacts = await sealVault(
+      [
+        {
+          id: "scaled-text",
+          kind: "text",
+          name: "large.txt",
+          path: "large.txt",
+          mime: "text/plain",
+          size: 9,
+          bytes: new TextEncoder().encode("scaled 21"),
+        },
+      ],
+      "Scaled 21",
+      21,
+    );
+    expect(artifacts.matrix.gridSize).toBe(21);
+    expect(artifacts.matrix.voxelCount).toBe(21 ** 3);
+    const unlocked = await unlockVault({
+      token: artifacts.token,
+      expectedShape: artifacts.shape,
+    });
+    expect(unlocked.ok).toBe(true);
+    const text = unlocked.items?.find((item) => item.kind === "text");
+    expect(await text?.blob?.text()).toBe("scaled 21");
+    const faces = buildAllFaceMaps(artifacts.matrix, DEFAULT_DESIGN);
+    expect(faces[0].gridSize).toBe(21);
+    expect(faces[0].cells).toHaveLength(21 ** 2);
+    expect(faceMapSvg(faces[0])).toContain("MATRIX");
   });
 });
