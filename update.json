@@ -1,0 +1,11 @@
+{
+  "version": "1.3.0",
+  "notes": "Remote update checks for web, Windows, Android, and iOS. Minor updates apply automatically; major versions ask first.",
+  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.3.0",
+  "downloads": {
+    "web": "https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/",
+    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.3.0/SCM-Studio-1.3.0.apk",
+    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.3.0/SCM-Studio-Setup-1.3.0.exe",
+    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.3.0"
+  }
+}
