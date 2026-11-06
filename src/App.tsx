@@ -5,6 +5,8 @@ import { Header } from "./components/Header";
 import { StudioPanel } from "./components/StudioPanel";
 import { CanvasOverlay } from "./components/CanvasOverlay";
 import { PlaybackBar } from "./components/PlaybackBar";
+import { RevealOverlay } from "./components/RevealOverlay";
+import { GuestView } from "./components/GuestView";
 import { Toasts } from "./components/Toasts";
 import { Scene } from "./components/scene/Scene";
 
@@ -14,12 +16,15 @@ const SHORTCUT_TABS: StudioTab[] = [
   "animate",
   "export",
   "verify",
+  "decrypt",
   "token",
 ];
 
 let bootstrapped = false;
 
 export default function App() {
+  const guestMode = useStudio((state) => state.guestMode);
+
   useEffect(() => {
     if (bootstrapped) {
       return;
@@ -44,6 +49,9 @@ export default function App() {
         useStudio.getState().restartTimeline();
         return;
       }
+      if (useStudio.getState().guestMode) {
+        return;
+      }
       const index = Number(event.key) - 1;
       if (Number.isInteger(index) && index >= 0 && index < SHORTCUT_TABS.length) {
         useStudio.getState().setTab(SHORTCUT_TABS[index]);
@@ -57,17 +65,22 @@ export default function App() {
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-[#05070d] pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] text-slate-100">
       <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.08),transparent_38%),radial-gradient(circle_at_82%_8%,rgba(167,139,250,0.08),transparent_34%),radial-gradient(circle_at_50%_100%,rgba(251,113,133,0.05),transparent_40%)]" />
       <Header />
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col lg:flex-row">
-        <section className="relative order-1 h-[42vh] shrink-0 overflow-hidden lg:order-2 lg:h-auto lg:flex-1 lg:shrink">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(14,116,144,0.14),transparent_58%)]" />
-          <Scene />
-          <CanvasOverlay />
-          <PlaybackBar />
-        </section>
-        <aside className="order-2 flex min-h-0 w-full flex-1 flex-col border-t border-white/[0.07] bg-[#070b14]/92 backdrop-blur-xl lg:order-1 lg:w-[382px] lg:flex-none lg:border-r lg:border-t-0">
-          <StudioPanel />
-        </aside>
-      </main>
+      {guestMode ? (
+        <GuestView />
+      ) : (
+        <main className="relative z-10 flex min-h-0 flex-1 flex-col lg:flex-row">
+          <section className="relative order-1 h-[42vh] shrink-0 overflow-hidden lg:order-2 lg:h-auto lg:flex-1 lg:shrink">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(14,116,144,0.14),transparent_58%)]" />
+            <Scene />
+            <CanvasOverlay />
+            <PlaybackBar />
+          </section>
+          <aside className="order-2 flex min-h-0 w-full flex-1 flex-col border-t border-white/[0.07] bg-[#070b14]/92 backdrop-blur-xl lg:order-1 lg:w-[382px] lg:flex-none lg:border-r lg:border-t-0">
+            <StudioPanel />
+          </aside>
+        </main>
+      )}
+      <RevealOverlay />
       <Toasts />
     </div>
   );

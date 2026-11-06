@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
@@ -25,6 +25,7 @@ import {
   voxelIndex,
 } from "../../lib/scm";
 import { shapeMask } from "../../lib/shapes";
+import { useStudio } from "../../store/useStudio";
 import { useVoxelMaterial } from "./useVoxelMaterial";
 
 export interface ActiveVoxel {
@@ -406,6 +407,35 @@ export function VoxelField({
 }) {
   const { material, uniforms } = useVoxelMaterial(design);
   const geometries = useMemo(() => buildGeometries(), []);
+  const revealPulse = useStudio((state) => state.revealPulse);
+  const [burstLayer, setBurstLayer] = useState<AnimationLayer | null>(null);
+
+  useEffect(() => {
+    if (!revealPulse) {
+      return;
+    }
+    const start = timeRef.current;
+    setBurstLayer({
+      id: `reveal-burst-${revealPulse}`,
+      type: "explode",
+      name: "Reveal Burst",
+      enabled: true,
+      delay: start,
+      duration: 2.8,
+      easing: "easeInOutCubic",
+      repeat: 1,
+      intensity: 1.35,
+      axis: "z",
+      mode: "slice",
+    });
+    const timer = window.setTimeout(() => setBurstLayer(null), 3100);
+    return () => window.clearTimeout(timer);
+  }, [revealPulse, timeRef]);
+
+  const animationLayers = useMemo(
+    () => (burstLayer ? [...layers, burstLayer] : layers),
+    [layers, burstLayer],
+  );
 
   useFrame(() => {
     uniforms.uTime.value = timeRef.current;
@@ -482,7 +512,7 @@ export function VoxelField({
             voxels={group.voxels}
             matrix={matrix}
             design={design}
-            layers={layers}
+            layers={animationLayers}
             timeRef={timeRef}
             material={material}
             baseScale={group.scale}
@@ -494,7 +524,7 @@ export function VoxelField({
           key={`${matrix.id}-pipes`}
           matrix={matrix}
           design={design}
-          layers={layers}
+          layers={animationLayers}
           timeRef={timeRef}
           material={material}
           geometry={geometries.pipe}

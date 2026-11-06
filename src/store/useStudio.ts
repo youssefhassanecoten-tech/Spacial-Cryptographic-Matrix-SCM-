@@ -4,33 +4,35 @@ import type {
   AnimationType,
   DesignState,
   PayloadKind,
+  RevealResult,
+  SCMShapePayload,
   SCMMatrix,
-  SCMPayload,
+  SCMPayloadManifest,
   StudioTab,
 } from "../types";
-import { VOXEL_COUNT } from "../types";
 import {
   createAnimationLayer,
   defaultAnimationLayers,
 } from "../lib/animation";
 import {
-  buildPayloadContainer,
-  buildShareLink,
-  bytesToBase64Url,
-  decryptToken,
-  describeTokenError,
-  embeddedPayloadBytes,
-  encryptPayload,
-  parsePayloadContainer,
-  readTokenFromLocation,
-  sha256Hex,
-} from "../lib/crypto";
-import {
   createMatrixFromSeed,
   createNewMatrix,
-  matrixFromPayload,
-  matrixToPayload,
 } from "../lib/scm";
+import {
+  MAX_TOTAL_PAYLOAD_BYTES,
+  createEmptyVault,
+  createTextDraft,
+  decodeShapeToken,
+  draftFromFile,
+  draftsFromUnlocked,
+  encodeShapeToken,
+  matrixFromShape,
+  readShapeFromLocation,
+  sealVault,
+  unlockVault,
+  type PayloadDraftItem,
+  type SealArtifacts,
+} from "../lib/vault";
 
 const GENESIS_SEED = 0x5c4d1a7b;
 const GENESIS_ID = "scm_genesis_0001";
@@ -67,21 +69,43 @@ export const DEFAULT_DESIGN: DesignState = {
   autoRotate: false,
 };
 
-export const TEXT_EMBED_LIMIT = 512;
-export const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+export const GUEST_DESIGN: DesignState = {
+  ...DEFAULT_DESIGN,
+  autoRotate: true,
+  showTrajectory: false,
+  showGrid: false,
+  showAnchors: false,
+  contrastGuard: false,
+};
 
-export interface PayloadInput {
-  kind: PayloadKind;
-  name: string;
-  mime: string;
-  bytes: Uint8Array;
+export interface SealedStats {
+  count: number;
+  totalSize: number;
+  embeddedSize: number;
+  packageSize: number;
+  kinds: Record<PayloadKind, number>;
 }
 
-export interface SealPayloadResult {
+export interface SealedVersion {
+  token: string;
+  shapeToken: string;
+  packageBlob: Blob | null;
+  sealedAt: string;
+}
+
+export interface SealResult {
   ok: boolean;
-  embedded: boolean;
-  container?: Blob;
   error?: string;
+  token?: string;
+  shapeToken?: string;
+  packageBlob?: Blob | null;
+}
+
+export interface UnlockResult {
+  ok: boolean;
+  error?: string;
+  needsPackage?: boolean;
+  reveal?: RevealResult;
 }
 
 export type ToastTone = "info" | "success" | "error";
@@ -95,8 +119,11 @@ export interface ToastState {
 export interface StudioState {
   matrix: SCMMatrix;
   token: string;
-  tokenStatus: "syncing" | "ready" | "error";
+  shapeToken: string;
+  tokenStatus: "idle" | "syncing" | "ready" | "error";
   tokenError: string | null;
+  guestMode: boolean;
+  guestShape: SCMShapePayload | null;
   design: DesignState;
   layers: AnimationLayer[];
   playing: boolean;
@@ -104,10 +131,14 @@ export interface StudioState {
   timeRef: { current: number };
   activeTab: StudioTab;
   toast: ToastState | null;
-  payload: SCMPayload | null;
-  payloadContent: Blob | null;
-  payloadContainer: Blob | null;
-  payloadIntegrity: boolean | null;
+  drafts: PayloadDraftItem[];
+  sealedStats: SealedStats | null;
+  packageBlob: Blob | null;
+  sealed: boolean;
+  editing: boolean;
+  previousVersions: SealedVersion[];
+  reveal: RevealResult | null;
+  revealPulse: number;
   setDesign: (patch: Partial<DesignState>) => void;
   setLayer: (id: string, patch: Partial<AnimationLayer>) => void;
   toggleLayer: (id: string) => void;
@@ -123,29 +154,78 @@ export interface StudioState {
   setTab: (tab: StudioTab) => void;
   notify: (message: string, tone?: ToastTone) => void;
   dismissToast: () => void;
-  syncCurrentToken: () => Promise<void>;
-  generateNewToken: (label?: string) => Promise<void>;
-  loadToken: (token: string) => Promise<boolean>;
+  addTextDraft: (text: string) => void;
+  addFiles: (files: File[]) => Promise<void>;
+  removeDraft: (id: string) => void;
+  updateTextDraft: (id: string, text: string) => void;
+  clearDrafts: () => void;
+  sealPayload: (label?: string) => Promise<SealResult>;
+  unlockPayload: (token: string, packageFile?: Blob | null) => Promise<UnlockResult>;
+  unlockForEdit: (token: string, packageFile?: Blob | null) => Promise<UnlockResult>;
+  newSCM: (label?: string) => Promise<void>;
   bootstrap: () => Promise<void>;
+  closeReveal: () => void;
   playAssemble: () => void;
-  sealPayload: (input: PayloadInput) => Promise<SealPayloadResult>;
-  clearPayload: () => Promise<void>;
-  loadPayloadContainer: (file: Blob) => Promise<{ ok: boolean; error?: string }>;
 }
 
 function withAssembleLayers(layers: AnimationLayer[]): AnimationLayer[] {
   return layers.map((layer) =>
     layer.type === "layerWave"
-      ? { ...layer, enabled: true, delay: 0, duration: 2.6, repeat: 1, easing: "easeOutCubic" }
+      ? {
+          ...layer,
+          enabled: true,
+          delay: 0,
+          duration: 2.6,
+          repeat: 1,
+          easing: "easeOutCubic",
+        }
       : layer,
   );
+}
+
+function sealedVersionFrom(
+  token: string,
+  shapeToken: string,
+  packageBlob: Blob | null,
+): SealedVersion | null {
+  if (!token || !shapeToken) {
+    return null;
+  }
+  return {
+    token,
+    shapeToken,
+    packageBlob,
+    sealedAt: new Date().toISOString(),
+  };
+}
+
+function statsFromManifest(manifest: SCMPayloadManifest): SealedStats {
+  const kinds: Record<PayloadKind, number> = {
+    text: 0,
+    image: 0,
+    video: 0,
+    document: 0,
+  };
+  for (const item of manifest.items) {
+    kinds[item.kind] += 1;
+  }
+  return {
+    count: manifest.items.length,
+    totalSize: manifest.totalSize,
+    embeddedSize: manifest.embeddedSize,
+    packageSize: manifest.packageSize,
+    kinds,
+  };
 }
 
 export const useStudio = create<StudioState>((set, get) => ({
   matrix: initialMatrix,
   token: "",
-  tokenStatus: "syncing",
+  shapeToken: "",
+  tokenStatus: "idle",
   tokenError: null,
+  guestMode: false,
+  guestShape: null,
   design: DEFAULT_DESIGN,
   layers: defaultAnimationLayers(),
   playing: true,
@@ -153,10 +233,14 @@ export const useStudio = create<StudioState>((set, get) => ({
   timeRef: { current: 0 },
   activeTab: "design",
   toast: null,
-  payload: null,
-  payloadContent: null,
-  payloadContainer: null,
-  payloadIntegrity: null,
+  drafts: [],
+  sealedStats: null,
+  packageBlob: null,
+  sealed: false,
+  editing: false,
+  previousVersions: [],
+  reveal: null,
+  revealPulse: 0,
 
   setDesign: (patch) =>
     set((state) => ({ design: { ...state.design, ...patch } })),
@@ -238,111 +322,353 @@ export const useStudio = create<StudioState>((set, get) => ({
         if (get().toast?.id === id) {
           set({ toast: null });
         }
-      }, 3600);
+      }, 4200);
     }
   },
 
   dismissToast: () => set({ toast: null }),
 
-  syncCurrentToken: async () => {
-    const { matrix } = get();
-    set({ tokenStatus: "syncing", tokenError: null });
-    try {
-      const token = await encryptPayload(matrixToPayload(matrix));
-      set({ token, tokenStatus: "ready", tokenError: null });
-    } catch (error) {
-      set({
-        tokenStatus: "error",
-        tokenError: describeTokenError(error),
-      });
+  addTextDraft: (text) => {
+    if (get().sealed) {
+      get().notify("This SCM is sealed. Unlock Edit Studio to add content.", "error");
+      return;
     }
+    if (!text) {
+      return;
+    }
+    const existingText = get().drafts.filter((draft) => draft.kind === "text").length;
+    const draft = createTextDraft(text, `note-${existingText + 1}.txt`);
+    set((state) => ({ drafts: [...state.drafts, draft] }));
   },
 
-  generateNewToken: async (label) => {
-    const matrix = createNewMatrix(label?.trim() || "Untitled Lattice");
-    set({
-      matrix,
-      tokenStatus: "syncing",
-      tokenError: null,
-      payload: null,
-      payloadContent: null,
-      payloadContainer: null,
-      payloadIntegrity: null,
-    });
-    get().timeRef.current = 0;
-    try {
-      const token = await encryptPayload(matrixToPayload(matrix));
-      set({
-        token,
-        tokenStatus: "ready",
-        tokenError: null,
-        playing: true,
-        layers: withAssembleLayers(get().layers),
-      });
-      get().notify("New SCM token generated and sealed.", "success");
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", buildShareLink(token));
+  addFiles: async (files) => {
+    if (get().sealed) {
+      get().notify("This SCM is sealed. Unlock Edit Studio to add content.", "error");
+      return;
+    }
+    if (files.length === 0) {
+      return;
+    }
+    const pending: PayloadDraftItem[] = [];
+    let total = get().drafts.reduce((sum, draft) => sum + draft.size, 0);
+    for (const file of files) {
+      const draft = await draftFromFile(file);
+      if (total + draft.size > MAX_TOTAL_PAYLOAD_BYTES) {
+        get().notify(
+          `Payload would exceed ${Math.round(
+            MAX_TOTAL_PAYLOAD_BYTES / (1024 * 1024),
+          )} MB. File ${draft.path} was not added.`,
+          "error",
+        );
+        break;
       }
-    } catch (error) {
-      set({ tokenStatus: "error", tokenError: describeTokenError(error) });
-      get().notify("Token encryption failed.", "error");
+      total += draft.size;
+      pending.push(draft);
+    }
+    if (pending.length > 0) {
+      set((state) => ({ drafts: [...state.drafts, ...pending] }));
+      get().notify(`${pending.length} item(s) added to the vault draft.`, "success");
     }
   },
 
-  loadToken: async (token) => {
-    const trimmed = token.trim();
-    if (!trimmed) {
-      get().notify("Paste an SCM1 token first.", "error");
-      return false;
+  removeDraft: (id) =>
+    set((state) => ({
+      drafts: state.drafts.filter((draft) => draft.id !== id),
+    })),
+
+  updateTextDraft: (id, text) => {
+    if (get().sealed) {
+      return;
+    }
+    const bytes = new TextEncoder().encode(text);
+    set((state) => ({
+      drafts: state.drafts.map((draft) =>
+        draft.id === id
+          ? { ...draft, bytes, size: bytes.byteLength }
+          : draft,
+      ),
+    }));
+  },
+
+  clearDrafts: () => set({ drafts: [] }),
+
+  sealPayload: async (label) => {
+    const { drafts, matrix, token, shapeToken, packageBlob } = get();
+    if (drafts.length === 0) {
+      return { ok: false, error: "Add at least one item before sealing." };
     }
     set({ tokenStatus: "syncing", tokenError: null });
     try {
-      const payload = await decryptToken(trimmed);
-      const matrix = matrixFromPayload(payload);
-      const embedded = payload.payload ? embeddedPayloadBytes(payload.payload) : null;
-      const payloadContent = embedded
-        ? new Blob([embedded], { type: payload.payload?.mime ?? "application/octet-stream" })
-        : null;
-      const payloadIntegrity = embedded && payload.payload
-        ? (await sha256Hex(embedded)) === payload.payload.sha256
-        : null;
+      const artifacts: SealArtifacts = await sealVault(drafts, label ?? matrix.label);
+      const previous = sealedVersionFrom(token, shapeToken, packageBlob);
       get().timeRef.current = 0;
       set({
-        matrix,
-        token: trimmed,
+        matrix: artifacts.matrix,
+        token: artifacts.token,
+        shapeToken: artifacts.shapeToken,
         tokenStatus: "ready",
         tokenError: null,
+        sealedStats: statsFromManifest(artifacts.manifest),
+        packageBlob: artifacts.packageBlob,
+        sealed: true,
+        editing: false,
+        drafts: [],
+        guestMode: false,
+        guestShape: null,
+        reveal: null,
         playing: true,
         layers: withAssembleLayers(get().layers),
-        payload: payload.payload ?? null,
-        payloadContent,
-        payloadContainer: null,
-        payloadIntegrity,
+        previousVersions: previous
+          ? [previous, ...get().previousVersions].slice(0, 12)
+          : get().previousVersions,
       });
-      get().notify(`Decrypted ${matrix.label} · ${matrix.activeCount}/${VOXEL_COUNT} active voxels.`, "success");
       if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", buildShareLink(trimmed));
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.hash = "";
+        window.history.replaceState(null, "", url.toString());
       }
-      return true;
+      get().notify(
+        `SCM sealed. ${artifacts.manifest.items.length} item(s) encrypted; the matrix reshaped and the token changed.`,
+        "success",
+      );
+      return {
+        ok: true,
+        token: artifacts.token,
+        shapeToken: artifacts.shapeToken,
+        packageBlob: artifacts.packageBlob,
+      };
     } catch (error) {
-      const message = describeTokenError(error);
+      const message =
+        error instanceof Error ? error.message : "Unable to seal this SCM.";
       set({ tokenStatus: "error", tokenError: message });
       get().notify(message, "error");
-      return false;
+      return { ok: false, error: message };
     }
+  },
+
+  unlockPayload: async (token, packageFile) => {
+    const trimmed = token.trim();
+    if (!trimmed) {
+      return { ok: false, error: "Paste the private SCM ID token first." };
+    }
+    const { guestShape, shapeToken } = get();
+    let expectedShape = guestShape;
+    if (!expectedShape && shapeToken) {
+      try {
+        expectedShape = decodeShapeToken(shapeToken);
+      } catch {
+        expectedShape = null;
+      }
+    }
+    set({ tokenStatus: "syncing", tokenError: null });
+    const result = await unlockVault({
+      token: trimmed,
+      expectedShape,
+      packageInput: packageFile ?? null,
+      storedPackage: get().packageBlob,
+    });
+    if (!result.ok) {
+      set({ tokenStatus: "error", tokenError: result.error ?? "Unlock failed." });
+      get().notify(result.error ?? "Unlock failed.", "error");
+      return { ok: false, error: result.error };
+    }
+    if (result.needsPackage) {
+      set({ tokenStatus: "ready", tokenError: null });
+      get().notify(result.error ?? "Load the encrypted package.", "info");
+      return { ok: false, needsPackage: true, error: result.error };
+    }
+    if (!result.shape || !result.manifest || !result.items) {
+      set({ tokenStatus: "error", tokenError: "Unlock returned incomplete data." });
+      return { ok: false, error: "Unlock returned incomplete data." };
+    }
+    const matrix = matrixFromShape(result.shape);
+    const reveal: RevealResult = {
+      manifest: result.manifest,
+      items: result.items,
+      shape: result.shape,
+      packageLoaded: Boolean(result.packageLoaded),
+    };
+    const nextShapeToken = shapeToken || encodeShapeToken(result.shape);
+    set({
+      matrix,
+      token: trimmed,
+      tokenStatus: "ready",
+      tokenError: null,
+      shapeToken: nextShapeToken,
+      guestShape: get().guestMode ? result.shape : get().guestShape,
+      sealedStats: statsFromManifest(result.manifest),
+      packageBlob: packageFile ?? get().packageBlob,
+      sealed: true,
+      editing: false,
+      reveal,
+      revealPulse: get().revealPulse + 1,
+      playing: true,
+    });
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        get().notify(
+          `SCM solved. ${result.items?.length ?? 0} item(s) revealed from the matrix.`,
+          "success",
+        );
+      }, 1500);
+    }
+    return { ok: true, reveal };
+  },
+
+  unlockForEdit: async (token, packageFile) => {
+    const trimmed = token.trim();
+    if (!trimmed) {
+      return { ok: false, error: "Paste the private SCM ID token first." };
+    }
+    const state = get();
+    if (state.sealed) {
+      const previous = sealedVersionFrom(
+        state.token,
+        state.shapeToken,
+        state.packageBlob,
+      );
+      if (previous) {
+        set({
+          previousVersions: [previous, ...state.previousVersions].slice(0, 12),
+        });
+      }
+    }
+    const result = await unlockVault({
+      token: trimmed,
+      packageInput: packageFile ?? null,
+      storedPackage: get().packageBlob,
+    });
+    if (!result.ok) {
+      get().notify(result.error ?? "Unable to open Edit Studio.", "error");
+      return { ok: false, error: result.error };
+    }
+    if (result.needsPackage) {
+      get().notify(result.error ?? "Load the encrypted package to edit.", "info");
+      return { ok: false, needsPackage: true, error: result.error };
+    }
+    if (!result.manifest) {
+      return { ok: false, error: "Token has no payload manifest." };
+    }
+    const drafts = draftsFromUnlocked(result.manifest, result.files);
+    if (drafts.length !== result.manifest.items.length) {
+      get().notify("Some encrypted items could not be opened for editing.", "error");
+    }
+    set({
+      matrix: result.shape ? matrixFromShape(result.shape) : get().matrix,
+      drafts,
+      sealed: false,
+      editing: true,
+      sealedStats: null,
+      packageBlob: null,
+      token: "",
+      shapeToken: "",
+      tokenStatus: "idle",
+      tokenError: null,
+      reveal: null,
+      activeTab: "payload",
+      playing: true,
+    });
+    get().notify(
+      "Edit Studio unlocked. The previous token and package remain valid; re-seal to mint a new shape and token.",
+      "info",
+    );
+    return { ok: true };
+  },
+
+  newSCM: async (label) => {
+    const state = get();
+    if (state.sealed) {
+      const previous = sealedVersionFrom(
+        state.token,
+        state.shapeToken,
+        state.packageBlob,
+      );
+      if (previous) {
+        set({
+          previousVersions: [previous, ...state.previousVersions].slice(0, 12),
+        });
+      }
+    }
+    const matrix = createNewMatrix(label?.trim() || "Untitled SCM");
+    const empty = await createEmptyVault(matrix);
+    get().timeRef.current = 0;
+    set({
+      matrix,
+      token: empty.token,
+      shapeToken: empty.shapeToken,
+      tokenStatus: "ready",
+      tokenError: null,
+      sealedStats: null,
+      packageBlob: null,
+      sealed: false,
+      editing: false,
+      drafts: [],
+      guestMode: false,
+      guestShape: null,
+      reveal: null,
+      playing: true,
+      activeTab: "payload",
+      layers: withAssembleLayers(get().layers),
+    });
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.hash = "";
+      window.history.replaceState(null, "", url.toString());
+    }
+    get().notify("New SCM created. Add content or unlock a previous version.", "success");
   },
 
   bootstrap: async () => {
-    const fromUrl = readTokenFromLocation();
-    if (fromUrl) {
-      await get().loadToken(fromUrl);
-      return;
+    const shapeParam = readShapeFromLocation();
+    if (shapeParam) {
+      try {
+        const shape = decodeShapeToken(shapeParam);
+        const matrix = matrixFromShape(shape);
+        get().timeRef.current = 0;
+        set({
+          matrix,
+          shapeToken: shapeParam,
+          guestMode: true,
+          guestShape: shape,
+          token: "",
+          tokenStatus: "idle",
+          tokenError: null,
+          design: GUEST_DESIGN,
+          layers: withAssembleLayers(defaultAnimationLayers()),
+          playing: true,
+          activeTab: "decrypt",
+          drafts: [],
+          sealedStats: null,
+          packageBlob: null,
+          sealed: false,
+          editing: false,
+          reveal: null,
+        });
+        return;
+      } catch {
+        get().notify("The SCM shape link is invalid or corrupt.", "error");
+      }
     }
     if (get().token) {
       return;
     }
-    await get().syncCurrentToken();
+    try {
+      const empty = await createEmptyVault(get().matrix);
+      set({
+        token: empty.token,
+        shapeToken: empty.shapeToken,
+        tokenStatus: "ready",
+        tokenError: null,
+        sealedStats: null,
+      });
+    } catch {
+      set({ tokenStatus: "error", tokenError: "Unable to initialize the token engine." });
+    }
   },
+
+  closeReveal: () => set({ reveal: null }),
 
   playAssemble: () => {
     get().timeRef.current = 0;
@@ -350,123 +676,5 @@ export const useStudio = create<StudioState>((set, get) => ({
       playing: true,
       layers: withAssembleLayers(get().layers),
     });
-  },
-
-  sealPayload: async (input) => {
-    const { matrix, payload: previousPayload, payloadContent: previousContent, payloadContainer: previousContainer } = get();
-    if (input.bytes.byteLength === 0) {
-      return { ok: false, embedded: false, error: "The payload is empty." };
-    }
-    if (input.bytes.byteLength > MAX_PAYLOAD_BYTES) {
-      return {
-        ok: false,
-        embedded: false,
-        error: `Payload exceeds the ${Math.round(MAX_PAYLOAD_BYTES / (1024 * 1024))} MB limit.`,
-      };
-    }
-    try {
-      const sha256 = await sha256Hex(input.bytes);
-      const embedded = input.kind === "text" && input.bytes.byteLength <= TEXT_EMBED_LIMIT;
-      const payload: SCMPayload = {
-        kind: input.kind,
-        name: input.name,
-        mime: input.mime,
-        size: input.bytes.byteLength,
-        sha256,
-        mode: embedded ? "embedded" : "external",
-        ...(embedded ? { data: bytesToBase64Url(input.bytes) } : {}),
-      };
-      set({ tokenStatus: "syncing", tokenError: null });
-      const token = await encryptPayload(matrixToPayload(matrix, payload));
-      const container = embedded
-        ? undefined
-        : await buildPayloadContainer(token, payload, input.bytes);
-      const bytes = new Uint8Array(input.bytes);
-      set({
-        token,
-        tokenStatus: "ready",
-        tokenError: null,
-        payload,
-        payloadContent: new Blob([bytes], { type: input.mime }),
-        payloadContainer: container ?? null,
-        payloadIntegrity: true,
-      });
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", buildShareLink(token));
-      }
-      return { ok: true, embedded, container };
-    } catch (error) {
-      set({
-        tokenStatus: "error",
-        tokenError: describeTokenError(error),
-        payload: previousPayload,
-        payloadContent: previousContent,
-        payloadContainer: previousContainer,
-      });
-      return { ok: false, embedded: false, error: describeTokenError(error) };
-    }
-  },
-
-  clearPayload: async () => {
-    const { matrix } = get();
-    set({ tokenStatus: "syncing", tokenError: null });
-    try {
-      const token = await encryptPayload(matrixToPayload(matrix));
-      set({
-        token,
-        tokenStatus: "ready",
-        tokenError: null,
-        payload: null,
-        payloadContent: null,
-        payloadContainer: null,
-        payloadIntegrity: null,
-      });
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", buildShareLink(token));
-      }
-      get().notify("Encrypted payload removed from the token.", "success");
-    } catch (error) {
-      set({ tokenStatus: "error", tokenError: describeTokenError(error) });
-      get().notify("Could not clear the payload.", "error");
-    }
-  },
-
-  loadPayloadContainer: async (file) => {
-    try {
-      const parsed = await parsePayloadContainer(file);
-      const tokenPayload = await decryptToken(parsed.header.token);
-      if (!tokenPayload.payload) {
-        throw new Error("The container token does not describe a payload.");
-      }
-      if (tokenPayload.payload.sha256.toLowerCase() !== parsed.payload.sha256) {
-        throw new Error("Container metadata does not match its token.");
-      }
-      if (!parsed.sha256Ok) {
-        throw new Error("Payload integrity check failed.");
-      }
-      const matrix = matrixFromPayload(tokenPayload);
-      get().timeRef.current = 0;
-      set({
-        matrix,
-        token: parsed.header.token,
-        tokenStatus: "ready",
-        tokenError: null,
-        playing: true,
-        layers: withAssembleLayers(get().layers),
-        payload: tokenPayload.payload,
-        payloadContent: new Blob([parsed.bytes], { type: parsed.payload.mime }),
-        payloadContainer: file,
-        payloadIntegrity: true,
-      });
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", buildShareLink(parsed.header.token));
-      }
-      get().notify("Encrypted container loaded and integrity verified.", "success");
-      return { ok: true };
-    } catch (error) {
-      const message = describeTokenError(error);
-      get().notify(message, "error");
-      return { ok: false, error: message };
-    }
   },
 }));

@@ -2,16 +2,38 @@
 
 The Spatial Cryptographic Matrix (SCM) is a next-generation data storage and transfer system that treats a complex geometric object as a multi-dimensional, fragmented cryptographic drive.
 
-SCM Studio is the local-first renderer, studio, payload vault, verification lab, and export suite for that matrix.
+SCM Studio is the local-first renderer, studio, encrypted payload vault, verification lab, and export suite for that matrix.
+
+## Live app
+
+**https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/**
+
+## How the sealed workflow works
+
+1. **Compose** any combination of text items, images, video, folders, PDFs, and documents.
+2. **Seal** the vault. The content root and a fresh salt derive a new matrix seed, matrix ID, shape, and token. The cube visibly reshapes.
+3. **Content disappears** from the studio. Only the encrypted private ID token and the encrypted `.scm` package remain.
+4. **Decrypt** by opening the Decrypt tab and pasting the private ID token. File items also need the matching `.scm` package. A solved-matrix explosion reveals the content.
+5. **Edit Studio** is gated by the private ID token. Add, remove, or edit items, then re-seal to mint a new shape and token.
+
+Offline encryption cannot revoke an old token. A re-seal archives the previous version locally, but any external copy of the old token and package still decrypts the old content.
+
+## QR and guest mode
+
+- The QR contains a **public shape token** (`SCMS1`) and never the private ID token.
+- Scanning opens a guest viewer with the exact 3D shape and animation only.
+- The guest page exposes one **Input Token** window. Content stays locked until the private `SCM1` token is pasted and, for files, the `.scm` package is loaded.
+- The private token is shared separately from the QR.
 
 ## Features
 
 ### Cryptographic core
 - Deterministic 9×9×9 matrix built from a seeded PRNG
 - Three hidden alignment anchors and a carved Manhattan path
-- Token-derived execution order used by the reveal animations
-- AES-GCM sealed `SCM1` tokens
-- QR deep links that auto-load and decrypt the matrix
+- Content-derived matrix seed: any add, remove, rename, or edit reshapes the matrix and changes the token
+- Public shape tokens (`SCMS1`) and AES-GCM private tokens (`SCM1`)
+- SHA-256 integrity checks for every payload item
+- Guest shape verification against the private token commitment
 - Phase 5 Test E/F verification in the app and in Vitest
 
 ### 3D studio
@@ -24,18 +46,26 @@ SCM Studio is the local-first renderer, studio, payload vault, verification lab,
 - Contrast guard, alignment anchors, macro-block cage, and token trajectory overlays
 - Reorderable cascade timeline: explode, layer wave, pulse, glow, and scanline
 
-### Payload vault
-- Encrypt text, images, video, and documents such as PDF and DOCX
-- Small text (≤ 512 UTF-8 bytes) embeds directly inside the `SCM1` token
-- Larger text and all files are AES-GCM sealed into a portable `.scm` container
-- SHA-256 integrity verification and decrypted previews
-- Native Android share/save support through Capacitor Filesystem and Share
+### Multi-item payload vault
+- Text, images, video, documents, and whole folders in one SCM
+- Small text embeds inside the private token; everything else is encrypted into a portable `.scm` package
+- Locked sealed state with no plaintext content retained in the studio store
+- Decrypted text reveals with a scramble animation; images and video preview; documents download
+- Native Android save/share through Capacitor Filesystem and Share
 
 ### Exports
 - Binary STL and Wavefront OBJ
 - Six orthogonal face maps as high-resolution PNG/SVG
 - Six-face contact sheet
-- QR code PNG/SVG and the SCM digital card PNG
+- Public shape QR PNG/SVG and SCM digital shape card PNG
+- Private ID token save and encrypted `.scm` package download
+
+## Payload limits
+
+- Maximum total payload: 64 MB per SCM
+- Text item that can embed in the token: 2 KB
+- Total embedded text per token: 4 KB
+- Larger text and all files go into the encrypted `.scm` package
 
 ## Development
 
@@ -59,18 +89,13 @@ npm.cmd run preview
 
 ## Web deployment
 
-The built site is compatible with GitHub Pages project paths. Build with the repository
-base path:
+The `gh-pages` branch contains the production build. GitHub Pages serves it at the URL above. To rebuild for a project path:
 
 ```powershell
 $env:VITE_BASE_PATH="/Spacial-Cryptographic-Matrix-SCM-/"
 $env:VITE_PUBLIC_APP_URL="https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/"
 npm.cmd run build
 ```
-
-The `gh-pages` branch contains the deployed build. To publish it, open the repository
-settings and set **Pages → Build and deployment → Source** to **Deploy from a branch**,
-then choose `gh-pages` and `/ (root)`.
 
 ## Android
 
@@ -88,17 +113,9 @@ cd android
 Outputs:
 
 - `android/app/build/outputs/apk/release/app-release.apk`
-- `release/SCM-Studio-1.0.0.apk` (local copy)
+- `release/SCM-Studio-1.1.0.apk` (local copy)
 
-The release APK is signed with the local keystore in `android/keystore/`. That folder,
-`local.properties`, and every build output are gitignored. Keep the keystore safe if you
-plan to publish updates with the same application signature.
-
-## Payload limits
-
-- Maximum payload: 64 MB per attachment
-- Embedded token text: 512 UTF-8 bytes
-- Larger content: share the generated `.scm` container alongside the QR/token
+The release APK is signed with the local keystore in `android/keystore/`. That folder, `local.properties`, and all build outputs are gitignored. Keep the keystore safe for future updates.
 
 ## License
 

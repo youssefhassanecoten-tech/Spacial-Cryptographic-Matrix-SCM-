@@ -59,12 +59,12 @@ function loadImage(source: string): Promise<HTMLImageElement> {
 
 export interface CardOptions {
   link: string;
-  token: string;
+  shapeToken: string;
   matrix: SCMMatrix;
 }
 
 export async function buildDigitalCardDataUrl(options: CardOptions): Promise<string> {
-  const { link, token, matrix } = options;
+  const { link, shapeToken, matrix } = options;
   const width = 1000;
   const height = 1400;
   const canvas = document.createElement("canvas");
@@ -109,10 +109,10 @@ export async function buildDigitalCardDataUrl(options: CardOptions): Promise<str
 
   ctx.fillStyle = "#e2e8f0";
   ctx.font = "700 52px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillText("SCM DIGITAL CARD", 72, 110);
+  ctx.fillText("SCM DIGITAL SHAPE CARD", 72, 110);
   ctx.fillStyle = "#5eead4";
   ctx.font = "500 22px ui-monospace, monospace";
-  ctx.fillText("DUO SYSTEM · ENCRYPTED MATRIX TOKEN · SCAN TO ASSEMBLE", 72, 152);
+  ctx.fillText("PUBLIC SHAPE · SCAN TO VIEW · ENTER ID TOKEN TO UNLOCK", 72, 152);
 
   const qrSize = 720;
   const qrX = (width - qrSize) / 2;
@@ -140,7 +140,7 @@ export async function buildDigitalCardDataUrl(options: CardOptions): Promise<str
   );
   ctx.fillStyle = "#5eead4";
   ctx.font = "500 22px ui-monospace, monospace";
-  ctx.fillText(`TOKEN FINGERPRINT · ${tokenFingerprint(token)}`, 72, 1194);
+  ctx.fillText(`SHAPE FINGERPRINT · ${tokenFingerprint(shapeToken)}`, 72, 1194);
 
   roundRect(ctx, 72, 1240, width - 144, 80, 18);
   ctx.fillStyle = "rgba(15,23,42,0.9)";
@@ -149,14 +149,14 @@ export async function buildDigitalCardDataUrl(options: CardOptions): Promise<str
   ctx.stroke();
   ctx.fillStyle = "#cbd5e1";
   ctx.font = "500 17px ui-monospace, monospace";
-  const shortToken = `${token.slice(0, 62)}…${token.slice(-18)}`;
+  const shortToken = `${shapeToken.slice(0, 62)}…${shapeToken.slice(-18)}`;
   ctx.fillText(shortToken, 96, 1288);
 
   ctx.fillStyle = "#475569";
   ctx.font = "500 18px ui-monospace, monospace";
   ctx.fillText("SCM STUDIO · LOCAL-FIRST 3D CRYPTOGRAPHIC INFORMATION", 72, 1356);
   ctx.textAlign = "right";
-  ctx.fillText("SCAN · DECRYPT · ASSEMBLE", width - 72, 1356);
+  ctx.fillText("SCAN · INSPECT · UNLOCK", width - 72, 1356);
   ctx.textAlign = "left";
 
   return canvas.toDataURL("image/png");

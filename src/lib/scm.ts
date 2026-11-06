@@ -1,5 +1,6 @@
 import type {
   SCMPayload,
+  SCMPayloadManifest,
   SCMAnchor,
   SCMMatrix,
   SCMTokenPayload,
@@ -204,6 +205,12 @@ export function createNewMatrix(label = "Untitled Lattice"): SCMMatrix {
 export function matrixToPayload(
   matrix: SCMMatrix,
   payload?: SCMPayload | null,
+  extra?: {
+    shapeId?: string;
+    salt?: string;
+    contentRoot?: string;
+    manifest?: SCMPayloadManifest;
+  },
 ): SCMTokenPayload {
   return {
     v: 1,
@@ -213,6 +220,10 @@ export function matrixToPayload(
     createdAt: matrix.createdAt,
     anchors: matrix.anchors.map((anchor) => [...anchor.coord] as Vec3),
     ...(payload ? { payload } : {}),
+    ...(extra?.shapeId ? { shapeId: extra.shapeId } : {}),
+    ...(extra?.salt ? { salt: extra.salt } : {}),
+    ...(extra?.contentRoot ? { contentRoot: extra.contentRoot } : {}),
+    ...(extra?.manifest ? { manifest: extra.manifest } : {}),
   };
 }
 

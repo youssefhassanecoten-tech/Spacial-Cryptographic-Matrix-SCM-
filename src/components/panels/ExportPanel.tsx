@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { ExportOptions } from "../../types";
 import type { FaceId } from "../../lib/exporters/vector";
-import { buildShareLink } from "../../lib/crypto";
+import { buildGuestLink } from "../../lib/vault";
 import { copyText } from "../../lib/clipboard";
 import {
   downloadBlob,
@@ -64,7 +64,9 @@ export function ExportPanel() {
   const matrix = useStudio((state) => state.matrix);
   const design = useStudio((state) => state.design);
   const token = useStudio((state) => state.token);
-  const payload = useStudio((state) => state.payload);
+  const shapeToken = useStudio((state) => state.shapeToken);
+  const sealedStats = useStudio((state) => state.sealedStats);
+  const packageBlob = useStudio((state) => state.packageBlob);
   const notify = useStudio((state) => state.notify);
   const [modelOptions, setModelOptions] = useState<ExportOptions>({
     includeBasePlate: true,
@@ -80,7 +82,10 @@ export function ExportPanel() {
   );
   const [copied, setCopied] = useState(false);
 
-  const link = useMemo(() => (token ? buildShareLink(token) : ""), [token]);
+  const link = useMemo(
+    () => (shapeToken ? buildGuestLink(shapeToken) : ""),
+    [shapeToken],
+  );
   const faceMaps = useMemo(() => buildAllFaceMaps(matrix, design), [matrix, design]);
   const selectedFace = faceMaps.find((map) => map.def.id === faceId) ?? faceMaps[0];
   const facePreview = useMemo(
@@ -96,7 +101,7 @@ export function ExportPanel() {
   useEffect(() => {
     setCardUrl("");
     setCardState("idle");
-  }, [token]);
+  }, [shapeToken]);
 
   useEffect(() => {
     if (!link) {
@@ -137,12 +142,14 @@ export function ExportPanel() {
   };
 
   const downloadCard = async () => {
-    if (!token) {
+    if (!shapeToken) {
       return;
     }
     setCardState("loading");
     try {
-      const url = cardUrl || (await buildDigitalCardDataUrl({ link, token, matrix }));
+      const url =
+        cardUrl ||
+        (await buildDigitalCardDataUrl({ link, shapeToken, matrix }));
       setCardUrl(url);
       setCardState("ready");
       downloadDataUrl(url, `${baseName}-digital-card.png`);
@@ -307,7 +314,7 @@ export function ExportPanel() {
       <PanelSection
         icon={<QrCode className="h-3.5 w-3.5" />}
         title="SCM Digital Card"
-        hint="A standard 2D QR carrying the encrypted token. Scanning opens this viewer and auto-assembles the 3D matrix."
+        hint="A public shape QR. Scanning opens the guest viewer, assembles the matrix, and locks all content behind the Input Token window."
         action={
           <Badge tone={qrState === "ready" ? "emerald" : qrState === "error" ? "rose" : "amber"}>
             {qrState === "ready" ? "ready" : qrState === "loading" ? "sealing" : "pending"}
@@ -373,7 +380,7 @@ export function ExportPanel() {
             variant="primary"
             className="flex-1"
             onClick={downloadCard}
-            disabled={!token || cardState === "loading"}
+            disabled={!shapeToken || cardState === "loading"}
           >
             {cardState === "loading" ? (
               <LoaderCircle className="h-3 w-3 animate-spin" />
@@ -386,26 +393,24 @@ export function ExportPanel() {
             size="sm"
             variant="outline"
             onClick={() => window.open(link || "#", "_blank", "noopener,noreferrer")}
-            disabled={!token}
+            disabled={!shapeToken}
           >
             <ExternalLink className="h-3 w-3" />
-            Open
+            Open guest page
           </Button>
         </div>
         <p className="mt-2 break-all rounded-md border border-white/[0.05] bg-black/25 p-2 font-mono text-[8px] leading-relaxed text-slate-500">
-          {link || "Token not sealed yet."}
+          {link || "Shape link will appear after the token engine finishes."}
         </p>
-        {payload?.mode === "external" ? (
+        <p className="mt-2 rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] p-2 text-[9px] leading-relaxed text-cyan-100/80">
+          The QR code contains only the public shape token. Content stays locked in the
+          guest viewer until the private ID token is entered.
+        </p>
+        {sealedStats && sealedStats.packageSize > 0 ? (
           <p className="mt-2 rounded-md border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[9px] leading-relaxed text-amber-200/80">
-            This token references an external encrypted payload. Share the generated{" "}
-            <span className="font-mono">.scm</span> container alongside the QR code so
-            the recipient can decrypt the content.
-          </p>
-        ) : null}
-        {token.length > 1800 ? (
-          <p className="mt-2 rounded-md border border-rose-400/20 bg-rose-400/[0.06] p-2 text-[9px] leading-relaxed text-rose-200/80">
-            This token is very dense ({token.length} chars). If a scanner struggles,
-            share the SCM1 token or the .scm container directly.
+            This SCM has packaged file items. Share the encrypted{" "}
+            <span className="font-mono">.scm</span> package with the QR code.
+            {packageBlob ? "" : " The package is not in this session."}
           </p>
         ) : null}
         {cardUrl ? (
@@ -417,27 +422,41 @@ export function ExportPanel() {
 
       <PanelSection
         icon={<FileText className="h-3.5 w-3.5" />}
-        title="Token Payload"
-        hint="The full encrypted SCM1 string is portable and offline-verifiable."
+        title="Private Token & Package"
+        hint="Keep these separate from the public QR. The private token is the decryption key."
         action={<Badge tone="violet">{token ? `${token.length} chars` : "empty"}</Badge>}
       >
         <div className="grid grid-cols-2 gap-1.5">
-          <Button size="sm" variant="outline" onClick={() => handleCopy(token, "Token")}>
+          <Button size="sm" variant="outline" onClick={() => handleCopy(token, "Private token")}>
             <Copy className="h-3 w-3" />
-            Copy token
+            Copy private token
           </Button>
           <Button
             size="sm"
             variant="outline"
             onClick={() =>
-              downloadText(token, `${baseName}.scm.txt`, "text/plain;charset=utf-8")
+              downloadText(token, `${baseName}.scm1.txt`, "text/plain;charset=utf-8")
             }
             disabled={!token}
           >
             <Download className="h-3 w-3" />
-            Save token
+            Save private token
           </Button>
         </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-1.5 w-full"
+          disabled={!packageBlob}
+          onClick={() => {
+            if (!packageBlob) return;
+            void downloadBlob(packageBlob, `${baseName}.scm`);
+            notify("Encrypted package exported.", "success");
+          }}
+        >
+          <Download className="h-3 w-3" />
+          Download .scm package
+        </Button>
       </PanelSection>
     </div>
   );

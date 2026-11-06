@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   Activity,
   Download,
+  FileKey,
   FileLock,
   FlaskConical,
   KeyRound,
@@ -11,6 +12,7 @@ import type { StudioTab } from "../types";
 import { VOXEL_COUNT } from "../types";
 import { useStudio } from "../store/useStudio";
 import { AnimatePanel } from "./panels/AnimatePanel";
+import { DecryptPanel } from "./panels/DecryptPanel";
 import { DesignPanel } from "./panels/DesignPanel";
 import { ExportPanel } from "./panels/ExportPanel";
 import { PayloadPanel } from "./panels/PayloadPanel";
@@ -24,7 +26,8 @@ const TABS: Array<{ id: StudioTab; label: string; icon: ReactNode }> = [
   { id: "animate", label: "Animate", icon: <Activity className="h-3.5 w-3.5" /> },
   { id: "export", label: "Export", icon: <Download className="h-3.5 w-3.5" /> },
   { id: "verify", label: "Verify", icon: <FlaskConical className="h-3.5 w-3.5" /> },
-  { id: "token", label: "Token", icon: <KeyRound className="h-3.5 w-3.5" /> },
+  { id: "decrypt", label: "Decrypt", icon: <KeyRound className="h-3.5 w-3.5" /> },
+  { id: "token", label: "Token", icon: <FileKey className="h-3.5 w-3.5" /> },
 ];
 
 function TabContent({ tab }: { tab: StudioTab }) {
@@ -39,6 +42,8 @@ function TabContent({ tab }: { tab: StudioTab }) {
       return <ExportPanel />;
     case "verify":
       return <VerifyPanel />;
+    case "decrypt":
+      return <DecryptPanel />;
     case "token":
       return <TokenPanel />;
     default:
@@ -53,8 +58,11 @@ export function StudioPanel() {
   const tokenStatus = useStudio((state) => state.tokenStatus);
   const design = useStudio((state) => state.design);
   const layers = useStudio((state) => state.layers);
-  const payload = useStudio((state) => state.payload);
+  const sealed = useStudio((state) => state.sealed);
+  const drafts = useStudio((state) => state.drafts);
+  const sealedStats = useStudio((state) => state.sealedStats);
   const enabledLayers = layers.filter((layer) => layer.enabled).length;
+  const itemCount = sealed ? sealedStats?.count ?? 0 : drafts.length;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -76,24 +84,28 @@ export function StudioPanel() {
           <div className="flex flex-col items-end gap-1">
             <Badge
               tone={
-                tokenStatus === "ready"
+                sealed
                   ? "emerald"
-                  : tokenStatus === "syncing"
+                  : drafts.length > 0
                     ? "amber"
-                    : "rose"
+                    : tokenStatus === "syncing"
+                      ? "amber"
+                      : tokenStatus === "error"
+                        ? "rose"
+                        : "slate"
               }
             >
-              {tokenStatus === "ready" ? "sealed" : tokenStatus}
+              {sealed ? "sealed" : drafts.length > 0 ? "draft" : tokenStatus}
             </Badge>
-            {payload ? (
-              <Badge tone="violet">{payload.kind}</Badge>
-            ) : null}
+            <Badge tone={sealed ? "violet" : "slate"}>
+              {itemCount} item{itemCount === 1 ? "" : "s"}
+            </Badge>
           </div>
         </div>
       </div>
 
       <div className="border-b border-white/[0.06] p-1.5">
-        <div className="grid grid-cols-6 gap-1">
+        <div className="grid grid-cols-7 gap-0.5">
           {TABS.map((tab) => {
             const active = tab.id === activeTab;
             return (

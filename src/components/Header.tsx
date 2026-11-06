@@ -7,36 +7,49 @@ import {
   Share2,
 } from "lucide-react";
 import { copyText } from "../lib/clipboard";
-import { buildShareLink } from "../lib/crypto";
+import { buildGuestLink } from "../lib/vault";
 import { useStudio } from "../store/useStudio";
 import { Badge, Button, IconButton } from "./ui";
 
 export function Header() {
   const matrix = useStudio((state) => state.matrix);
-  const token = useStudio((state) => state.token);
+  const shapeToken = useStudio((state) => state.shapeToken);
   const tokenStatus = useStudio((state) => state.tokenStatus);
+  const sealed = useStudio((state) => state.sealed);
+  const guestMode = useStudio((state) => state.guestMode);
   const setTab = useStudio((state) => state.setTab);
-  const generateNewToken = useStudio((state) => state.generateNewToken);
+  const newSCM = useStudio((state) => state.newSCM);
   const notify = useStudio((state) => state.notify);
   const [busy, setBusy] = useState(false);
 
   const share = async () => {
-    if (!token) {
-      notify("Token is still sealing. Try again in a moment.", "error");
+    if (!shapeToken) {
+      notify("Shape token is still being generated.", "error");
       return;
     }
-    const ok = await copyText(buildShareLink(token));
+    const ok = await copyText(buildGuestLink(shapeToken));
     notify(
-      ok ? "Share link copied — scanning it opens the 3D viewer." : "Clipboard access denied.",
+      ok
+        ? "Guest shape link copied. Recipients still need the private ID token to unlock content."
+        : "Clipboard access denied.",
       ok ? "success" : "error",
     );
   };
 
   const create = async () => {
     setBusy(true);
-    await generateNewToken(`Lattice ${new Date().toLocaleDateString()}`);
+    await newSCM();
     setBusy(false);
   };
+
+  const statusTone =
+    tokenStatus === "ready"
+      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+      : tokenStatus === "syncing"
+        ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
+        : tokenStatus === "idle"
+          ? "border-slate-400/25 bg-slate-400/10 text-slate-300"
+          : "border-rose-400/25 bg-rose-400/10 text-rose-200";
 
   return (
     <header className="relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-white/[0.07] bg-[#060a12]/85 px-3 backdrop-blur-xl md:gap-3 md:px-4">
@@ -50,72 +63,79 @@ export function Header() {
             SCM STUDIO
           </h1>
           <p className="hidden truncate font-mono text-[8px] uppercase tracking-[0.18em] text-slate-500 sm:block">
-            3D cryptographic matrix · phase 4
+            3D cryptographic matrix · phase 6
           </p>
         </div>
       </div>
 
-      <div className="ml-2 hidden items-center gap-2 lg:flex">
-        <Badge tone="cyan">9³ lattice</Badge>
-        <Badge tone="violet">{matrix.activeCount} voxels</Badge>
-        <span className="max-w-40 truncate font-mono text-[9px] text-slate-500">
-          {matrix.label}
-        </span>
-      </div>
+      {!guestMode ? (
+        <div className="ml-2 hidden items-center gap-2 lg:flex">
+          <Badge tone="cyan">9³ lattice</Badge>
+          <Badge tone="violet">{matrix.activeCount} voxels</Badge>
+          <span className="max-w-40 truncate font-mono text-[9px] text-slate-500">
+            {matrix.label}
+          </span>
+        </div>
+      ) : null}
 
       <div className="ml-auto flex items-center gap-1.5">
-        <span
-          className={`hidden items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-wider sm:flex ${
-            tokenStatus === "ready"
-              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-              : tokenStatus === "syncing"
-                ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
-                : "border-rose-400/25 bg-rose-400/10 text-rose-200"
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              tokenStatus === "ready"
-                ? "bg-emerald-300"
-                : tokenStatus === "syncing"
-                  ? "animate-pulse bg-amber-300"
-                  : "bg-rose-300"
-            }`}
-          />
-          {tokenStatus === "ready" ? "token sealed" : tokenStatus}
-        </span>
-        <IconButton label="Share digital card" onClick={() => void share()}>
-          <Share2 className="h-3.5 w-3.5" />
-        </IconButton>
-        <IconButton label="Load token" onClick={() => setTab("token")}>
-          <KeyRound className="h-3.5 w-3.5" />
-        </IconButton>
-        <Button
-          size="sm"
-          variant="primary"
-          className="max-sm:hidden"
-          onClick={() => void create()}
-          disabled={busy}
-        >
-          {busy ? (
-            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Plus className="h-3.5 w-3.5" />
-          )}
-          New token
-        </Button>
-        <IconButton
-          label="Generate new token"
-          className="sm:hidden"
-          onClick={() => void create()}
-          disabled={busy}
-        >
-          {busy ? (
-            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Plus className="h-3.5 w-3.5" />
-          )}
-        </IconButton>
+        {!guestMode ? (
+          <>
+            <span
+              className={`hidden items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-wider sm:flex ${statusTone}`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  tokenStatus === "ready"
+                    ? "bg-emerald-300"
+                    : tokenStatus === "syncing"
+                      ? "animate-pulse bg-amber-300"
+                      : tokenStatus === "idle"
+                        ? "bg-slate-300"
+                        : "bg-rose-300"
+                }`}
+              />
+              {sealed ? "SCM sealed" : tokenStatus === "ready" ? "shape ready" : tokenStatus}
+            </span>
+            <IconButton label="Share guest shape link" onClick={() => void share()}>
+              <Share2 className="h-3.5 w-3.5" />
+            </IconButton>
+            <IconButton
+              label="Unlock with ID token"
+              onClick={() => setTab("decrypt")}
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+            </IconButton>
+            <Button
+              size="sm"
+              variant="primary"
+              className="max-sm:hidden"
+              onClick={() => void create()}
+              disabled={busy}
+            >
+              {busy ? (
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              New SCM
+            </Button>
+            <IconButton
+              label="Create new SCM"
+              className="sm:hidden"
+              onClick={() => void create()}
+              disabled={busy}
+            >
+              {busy ? (
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+            </IconButton>
+          </>
+        ) : (
+          <Badge tone="cyan">guest viewer</Badge>
+        )}
       </div>
     </header>
   );

@@ -27,6 +27,7 @@ export interface SCMMatrix {
 
 export type PayloadKind = "text" | "image" | "video" | "document";
 export type PayloadMode = "embedded" | "external";
+export type PayloadItemMode = "embedded" | "package";
 
 export interface SCMPayload {
   kind: PayloadKind;
@@ -38,6 +39,49 @@ export interface SCMPayload {
   data?: string;
 }
 
+export interface SCMPayloadItem {
+  id: string;
+  kind: PayloadKind;
+  name: string;
+  path: string;
+  mime: string;
+  size: number;
+  sha256: string;
+  mode: PayloadItemMode;
+  data?: string;
+}
+
+export interface SCMPayloadManifest {
+  v: 1;
+  items: SCMPayloadItem[];
+  totalSize: number;
+  embeddedSize: number;
+  packageSize: number;
+  contentRoot: string;
+}
+
+export interface SCMShapePayload {
+  v: 1;
+  kind: "shape";
+  id: string;
+  seed: number;
+  label: string;
+  createdAt: string;
+  anchors: Vec3[];
+  shapeId: string;
+}
+
+export interface RevealedItem extends SCMPayloadItem {
+  blob?: Blob;
+}
+
+export interface RevealResult {
+  manifest: SCMPayloadManifest;
+  items: RevealedItem[];
+  shape: SCMShapePayload | null;
+  packageLoaded: boolean;
+}
+
 export interface SCMTokenPayload {
   v: 1;
   id: string;
@@ -45,6 +89,10 @@ export interface SCMTokenPayload {
   label: string;
   createdAt: string;
   anchors: Vec3[];
+  shapeId?: string;
+  salt?: string;
+  contentRoot?: string;
+  manifest?: SCMPayloadManifest;
   payload?: SCMPayload;
 }
 
@@ -164,4 +212,5 @@ export type StudioTab =
   | "animate"
   | "export"
   | "verify"
+  | "decrypt"
   | "token";

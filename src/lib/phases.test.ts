@@ -20,6 +20,13 @@ import {
   matrixSignature,
 } from "./scm";
 import { buildTrajectory, manhattanAdjacent, validateTrajectory } from "./trajectory";
+import {
+  buildGuestLink,
+  decodeShapeToken,
+  sealVault,
+  unlockVault,
+  type PayloadDraftItem,
+} from "./vault";
 import { runTestE, runTestF } from "./verify";
 import {
   buildModelSoup,
@@ -238,5 +245,115 @@ describe("Phase 4 visual engine", () => {
     const again = buildTrajectory(matrix);
     expect(again.signature).toBe(trajectory.signature);
     expect(again.constellationSignature).toBe(trajectory.constellationSignature);
+  });
+});
+
+describe("Phase 6 sealed multi-item vault", () => {
+  const textDraft = (text: string, name: string): PayloadDraftItem => ({
+    id: `text-${name}`,
+    kind: "text",
+    name,
+    path: name,
+    mime: "text/plain",
+    size: new TextEncoder().encode(text).byteLength,
+    bytes: new TextEncoder().encode(text),
+  });
+
+  const binaryDraft = (name: string, kind: "image" | "document", data: string): PayloadDraftItem => {
+    const bytes = new TextEncoder().encode(data);
+    return {
+      id: `bin-${name}`,
+      kind,
+      name,
+      path: `folder/${name}`,
+      mime: kind === "image" ? "image/png" : "application/pdf",
+      size: bytes.byteLength,
+      bytes,
+    };
+  };
+
+  it("seals text, image, and document items into one content-derived shape", async () => {
+    const drafts = [
+      textDraft("the vault phrase is amber-nine", "note.txt"),
+      binaryDraft("image.png", "image", "fake image bytes"),
+      binaryDraft("document.pdf", "document", "fake pdf bytes"),
+    ];
+    const artifacts = await sealVault(drafts, "Multi Item Test");
+    expect(artifacts.matrix.label).toBe("Multi Item Test");
+    expect(artifacts.manifest.items).toHaveLength(3);
+    expect(artifacts.manifest.items.find((item) => item.kind === "text")?.mode).toBe(
+      "embedded",
+    );
+    expect(artifacts.manifest.items.find((item) => item.kind === "image")?.mode).toBe(
+      "package",
+    );
+    expect(artifacts.packageBlob).not.toBeNull();
+    const shape = decodeShapeToken(artifacts.shapeToken);
+    expect(shape.seed).toBe(artifacts.matrix.seed);
+    expect(shape.shapeId).toBe(artifacts.shape.shapeId);
+    const link = buildGuestLink(artifacts.shapeToken, "https://example.com/app/");
+    expect(new URL(link).searchParams.get("shape")).toBe(artifacts.shapeToken);
+  });
+
+  it("unlocks embedded text with the token alone and files with the package", async () => {
+    const drafts = [
+      textDraft("token-only secret", "secret.txt"),
+      binaryDraft("photo.png", "image", "image payload"),
+    ];
+    const artifacts = await sealVault(drafts, "Unlock Test");
+    const tokenOnly = await unlockVault({
+      token: artifacts.token,
+      expectedShape: artifacts.shape,
+    });
+    expect(tokenOnly.ok).toBe(true);
+    expect(tokenOnly.needsPackage).toBe(true);
+
+    const full = await unlockVault({
+      token: artifacts.token,
+      expectedShape: artifacts.shape,
+      packageInput: artifacts.packageBlob,
+    });
+    expect(full.ok).toBe(true);
+    expect(full.needsPackage).toBeFalsy();
+    expect(full.items).toHaveLength(2);
+    const textItem = full.items?.find((item) => item.kind === "text");
+    expect(await textItem?.blob?.text()).toBe("token-only secret");
+    const imageItem = full.items?.find((item) => item.kind === "image");
+    expect(new TextDecoder().decode(await imageItem?.blob?.arrayBuffer())).toBe(
+      "image payload",
+    );
+  });
+
+  it("reshapes the matrix and token when content changes", async () => {
+    const first = await sealVault([textDraft("first note", "one.txt")], "First");
+    const second = await sealVault([textDraft("second note", "two.txt")], "Second");
+    expect(first.matrix.id).not.toBe(second.matrix.id);
+    expect(first.matrix.seed).not.toBe(second.matrix.seed);
+    expect(first.token).not.toBe(second.token);
+    expect(first.shape.shapeId).not.toBe(second.shape.shapeId);
+  });
+
+  it("rejects a private token from a different guest shape", async () => {
+    const first = await sealVault([textDraft("first", "one.txt")], "First");
+    const second = await sealVault([textDraft("second", "two.txt")], "Second");
+    const mismatch = await unlockVault({
+      token: first.token,
+      expectedShape: second.shape,
+    });
+    expect(mismatch.ok).toBe(false);
+    expect(mismatch.error).toContain("does not belong");
+  });
+
+  it("keeps a previous token valid after re-sealing a new version", async () => {
+    const first = await sealVault([textDraft("old secret", "old.txt")], "Old Version");
+    const second = await sealVault([textDraft("new secret", "new.txt")], "New Version");
+    const oldUnlock = await unlockVault({
+      token: first.token,
+      expectedShape: first.shape,
+    });
+    expect(oldUnlock.ok).toBe(true);
+    const oldText = oldUnlock.items?.find((item) => item.kind === "text");
+    expect(await oldText?.blob?.text()).toBe("old secret");
+    expect(second.token).not.toBe(first.token);
   });
 });

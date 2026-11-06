@@ -1,6 +1,8 @@
 import type {
   PayloadKind,
   SCMPayload,
+  SCMPayloadItem,
+  SCMPayloadManifest,
   SCMTokenPayload,
 } from "../types";
 import { stableHash } from "./scm";
@@ -112,6 +114,76 @@ function validateContent(value: unknown): SCMPayload | undefined {
   };
 }
 
+function validateManifest(value: unknown): SCMPayloadManifest | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "object") {
+    throw new Error("Token manifest is malformed.");
+  }
+  const manifest = value as Partial<SCMPayloadManifest>;
+  if (manifest.v !== 1 || !Array.isArray(manifest.items)) {
+    throw new Error("Token manifest has an unsupported version.");
+  }
+  const items: SCMPayloadItem[] = manifest.items.map((value) => {
+    if (!value || typeof value !== "object") {
+      throw new Error("Token manifest item is malformed.");
+    }
+    const item = value as Partial<SCMPayloadItem>;
+    if (!item.kind || !PAYLOAD_KINDS.includes(item.kind)) {
+      throw new Error("Token manifest item has an unsupported kind.");
+    }
+    if (
+      typeof item.id !== "string" ||
+      typeof item.name !== "string" ||
+      typeof item.path !== "string" ||
+      typeof item.mime !== "string" ||
+      typeof item.size !== "number" ||
+      typeof item.sha256 !== "string" ||
+      !/^[0-9a-f]{64}$/i.test(item.sha256)
+    ) {
+      throw new Error("Token manifest item is incomplete.");
+    }
+    if (item.mode !== "embedded" && item.mode !== "package") {
+      throw new Error("Token manifest item mode is invalid.");
+    }
+    if (item.mode === "embedded" && typeof item.data !== "string") {
+      throw new Error("Embedded manifest item is missing data.");
+    }
+    if (item.mode === "package" && item.data) {
+      throw new Error("Packaged manifest item cannot include inline data.");
+    }
+    return {
+      id: item.id,
+      kind: item.kind,
+      name: item.name,
+      path: item.path,
+      mime: item.mime,
+      size: item.size,
+      sha256: item.sha256.toLowerCase(),
+      mode: item.mode,
+      ...(item.data ? { data: item.data } : {}),
+    };
+  });
+  if (
+    typeof manifest.totalSize !== "number" ||
+    typeof manifest.embeddedSize !== "number" ||
+    typeof manifest.packageSize !== "number" ||
+    typeof manifest.contentRoot !== "string" ||
+    !/^[0-9a-f]{64}$/i.test(manifest.contentRoot)
+  ) {
+    throw new Error("Token manifest totals are invalid.");
+  }
+  return {
+    v: 1,
+    items,
+    totalSize: manifest.totalSize,
+    embeddedSize: manifest.embeddedSize,
+    packageSize: manifest.packageSize,
+    contentRoot: manifest.contentRoot.toLowerCase(),
+  };
+}
+
 function validatePayload(value: unknown): SCMTokenPayload {
   if (!value || typeof value !== "object") {
     throw new Error("Token payload is empty.");
@@ -141,6 +213,19 @@ function validatePayload(value: unknown): SCMTokenPayload {
       throw new Error("Token contains an out-of-bounds anchor coordinate.");
     }
   }
+  if (payload.shapeId !== undefined && typeof payload.shapeId !== "string") {
+    throw new Error("Token shape commitment is invalid.");
+  }
+  if (payload.salt !== undefined && typeof payload.salt !== "string") {
+    throw new Error("Token content salt is invalid.");
+  }
+  if (
+    payload.contentRoot !== undefined &&
+    (typeof payload.contentRoot !== "string" ||
+      !/^[0-9a-f]{64}$/i.test(payload.contentRoot))
+  ) {
+    throw new Error("Token content root is invalid.");
+  }
   return {
     v: 1,
     id: payload.id,
@@ -149,6 +234,10 @@ function validatePayload(value: unknown): SCMTokenPayload {
     createdAt:
       typeof payload.createdAt === "string" ? payload.createdAt : new Date(0).toISOString(),
     anchors: payload.anchors.map((anchor) => [anchor[0], anchor[1], anchor[2]]),
+    ...(payload.shapeId ? { shapeId: payload.shapeId } : {}),
+    ...(payload.salt ? { salt: payload.salt } : {}),
+    ...(payload.contentRoot ? { contentRoot: payload.contentRoot } : {}),
+    ...(payload.manifest ? { manifest: validateManifest(payload.manifest) } : {}),
     ...(payload.payload ? { payload: validateContent(payload.payload) } : {}),
   };
 }
