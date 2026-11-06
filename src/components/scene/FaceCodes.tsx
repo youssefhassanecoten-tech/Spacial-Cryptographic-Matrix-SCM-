@@ -10,6 +10,7 @@ import { hashCell, hashString } from "../../lib/rng";
 import {
   coordToWorld,
   indexToCoord,
+  voxelIndex,
   worldSpacing,
 } from "../../lib/scm";
 import { shapeMask } from "../../lib/shapes";
@@ -130,8 +131,15 @@ export function FaceCodes({
       return all;
     }
 
-    for (const index of matrix.path) {
-      addVoxel(index);
+    for (const anchor of matrix.anchors) {
+      addVoxel(
+        voxelIndex(
+          anchor.coord[0],
+          anchor.coord[1],
+          anchor.coord[2],
+          matrix.gridSize,
+        ),
+      );
     }
     return all;
   }, [matrix, design.faceCodeMode, design.shape]);

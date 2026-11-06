@@ -25,7 +25,7 @@ Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³**.
 
 - **Auto** keeps 9³ for small payloads and grows to 12³, 15³, 18³, then 21³ as the package grows toward 64 MB.
 - **3³ and 6³** are manual mini modes.
-- **Face codes:** auto mode puts a maze micro-code on every active cube below 9³, and sparse anchor-path markers at 9³ and above. The Design tab can force all faces or turn them off.
+- **Face codes:** auto mode puts a maze micro-code on every active cube below 9³, and separate hidden-anchor points at 9³ and above. The Design tab can force all faces or turn them off.
 - Each marker is a content-derived maze shard rendered on one cube face. Full content remains in the private token and `.scm` package; the face layer is a distributed visual data surface, not a replacement for the package.
 
 ## QR and guest mode
@@ -105,9 +105,9 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Output: `release-electron/SCM-Studio-Portable-1.2.0.exe`
+Output: `release-electron/SCM-Studio-Portable-1.2.1.exe`
 
-Local copy: `release/SCM-Studio-Portable-1.2.0.exe`.
+Local copy: `release/SCM-Studio-Portable-1.2.1.exe`.
 
 The portable Windows executable is unsigned, so Windows SmartScreen may warn on first launch. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 

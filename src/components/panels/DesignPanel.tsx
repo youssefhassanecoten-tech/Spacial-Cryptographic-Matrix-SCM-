@@ -375,7 +375,7 @@ export function DesignPanel() {
       <PanelSection
         icon={<ScanLine className="h-3.5 w-3.5" />}
         title="Face Codes"
-        hint="Maze micro-codes stamped on cube faces. Auto uses every active cube below 9³ and sparse anchor-path markers from 9³ upward."
+        hint="Maze micro-codes stamped on cube faces. Auto uses every active cube below 9³ and separate hidden-anchor points from 9³ upward."
         action={
           <Badge tone={design.faceCodeMode === "off" ? "slate" : "cyan"}>
             {design.faceCodeMode}

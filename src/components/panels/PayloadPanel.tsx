@@ -457,7 +457,7 @@ export function PayloadPanel() {
       <PanelSection
         icon={<Package className="h-3.5 w-3.5" />}
         title="Matrix Scale"
-        hint="Auto grows the lattice with payload size. 3³ and 6³ are manual mini modes with a face code on every active cube; 9³ and above use sparse anchor-path face markers."
+        hint="Auto grows the lattice with payload size. 3³ and 6³ are manual mini modes with a face code on every active cube; 9³ and above use separate hidden-anchor points."
         action={<Badge tone="cyan">seal at {effectiveSize}³</Badge>}
       >
         <Segmented
@@ -490,7 +490,7 @@ export function PayloadPanel() {
                   ? "all active cubes"
                   : effectiveSize < 9
                     ? "all active cubes"
-                    : "anchor path"
+                    : "anchor points"
             }
           />
         </div>
