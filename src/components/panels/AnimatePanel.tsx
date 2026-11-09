@@ -19,12 +19,22 @@ import {
   Trash,
   Zap,
 } from "lucide-react";
-import type { AnimationLayer, AnimationType, EasingName } from "../../types";
+import type {
+  AnimationLayer,
+  AnimationType,
+  EasingName,
+  ExplosionType,
+} from "../../types";
 import {
   ANIMATION_TYPES,
   EASING_LABELS,
   EASING_NAMES,
 } from "../../lib/animation";
+import {
+  EXPLOSION_HINTS,
+  EXPLOSION_LABELS,
+  EXPLOSION_TYPES,
+} from "../../lib/reveal";
 import { useStudio } from "../../store/useStudio";
 import {
   Badge,
@@ -210,6 +220,8 @@ export function AnimatePanel() {
   const restartTimeline = useStudio((state) => state.restartTimeline);
   const speed = useStudio((state) => state.speed);
   const setSpeed = useStudio((state) => state.setSpeed);
+  const revealStyle = useStudio((state) => state.revealStyle);
+  const setRevealStyle = useStudio((state) => state.setRevealStyle);
   const [expanded, setExpanded] = useState<string | null>(layers[0]?.id ?? null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
@@ -246,6 +258,27 @@ export function AnimatePanel() {
 
   return (
     <div className="space-y-3">
+      <PanelSection
+        icon={<Sparkles className="h-3.5 w-3.5" />}
+        title="Reveal Explosion"
+        hint={`${EXPLOSION_HINTS[revealStyle]} The selected type is written into the token as a versioned reveal directive.`}
+        action={<Badge tone="violet">token v1</Badge>}
+      >
+        <Segmented
+          value={revealStyle}
+          onChange={(value) => setRevealStyle(value as ExplosionType)}
+          options={EXPLOSION_TYPES.map((type) => ({
+            value: type,
+            label: EXPLOSION_LABELS[type],
+          }))}
+          columns={3}
+        />
+        <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+          Unknown or newer explosion types fall back to Radial on older builds, so
+          tokens stay readable.
+        </p>
+      </PanelSection>
+
       <PanelSection
         icon={<Activity className="h-3.5 w-3.5" />}
         title="Cascade Timeline"

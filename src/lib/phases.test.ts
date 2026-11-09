@@ -12,7 +12,9 @@ import {
   sha256Hex,
 } from "./crypto";
 import {
+  autoGridSizeForBytes,
   bitstreamSignature,
+  capacityForGridSize,
   createBlankMatrix,
   createMatrixFromSeed,
   indexToCoord,
@@ -29,6 +31,7 @@ import {
   unlockVault,
   type PayloadDraftItem,
 } from "./vault";
+import { resolveExplosionType } from "./reveal";
 import { runTestE, runTestF } from "./verify";
 import {
   buildModelSoup,
@@ -191,7 +194,7 @@ describe("Phase 4 visual engine", () => {
   it("passes Test E: customization interoperability", async () => {
     const result = await runTestE();
     expect(result.passed).toBe(true);
-    expect(result.metrics["variants tested"]).toBe(52);
+    expect(result.metrics["variants tested"]).toBe(57);
     expect(useStudio.getState().matrix).toBe(matrix);
   });
 
@@ -465,5 +468,81 @@ describe("Phase 8 volume fill", () => {
     expect(unlocked.ok).toBe(true);
     const text = unlocked.items?.find((item) => item.kind === "text");
     expect(await text?.blob?.text()).toBe("data fill note");
+  });
+});
+
+describe("Phase 9 capacity and reveal directives", () => {
+  it("grows only after a lattice capacity is exceeded", () => {
+    const small = capacityForGridSize(3);
+    const medium = capacityForGridSize(6);
+    expect(autoGridSizeForBytes(small)).toBe(3);
+    expect(autoGridSizeForBytes(small + 1)).toBe(6);
+    expect(autoGridSizeForBytes(medium)).toBe(6);
+    expect(autoGridSizeForBytes(medium + 1)).toBe(9);
+    expect(autoGridSizeForBytes(capacityForGridSize(21))).toBe(21);
+  });
+
+  it("carries a versioned reveal type through the shape and private token", async () => {
+    const draft: PayloadDraftItem = {
+      id: "reveal-text",
+      kind: "text",
+      name: "reveal.txt",
+      path: "reveal.txt",
+      mime: "text/plain",
+      size: 10,
+      bytes: new TextEncoder().encode("reveal me!"),
+    };
+    const artifacts = await sealVault([draft], "Reveal Test", 9, "full", "vortex");
+    expect(artifacts.shape.reveal).toEqual({ v: 1, type: "vortex" });
+    const shape = decodeShapeToken(artifacts.shapeToken);
+    expect(shape.reveal).toEqual({ v: 1, type: "vortex" });
+    expect(matrixFromShape(shape).reveal).toBe("vortex");
+    const unlocked = await unlockVault({
+      token: artifacts.token,
+      expectedShape: shape,
+    });
+    expect(unlocked.ok).toBe(true);
+    expect(unlocked.shape?.reveal).toEqual({ v: 1, type: "vortex" });
+  });
+
+  it("falls back unknown reveal types to radial", () => {
+    expect(resolveExplosionType({ v: 99, type: "supernova" })).toBe("radial");
+    expect(resolveExplosionType("vortex")).toBe("vortex");
+  });
+});
+
+describe("Phase 10 live preview", () => {
+  it("rebuilds the preview and grid tier from drafts", () => {
+    const smallDraft: PayloadDraftItem = {
+      id: "preview-small",
+      kind: "text",
+      name: "small.txt",
+      path: "small.txt",
+      mime: "text/plain",
+      size: 32,
+      bytes: new TextEncoder().encode("preview"),
+    };
+    useStudio.setState({
+      drafts: [smallDraft],
+      sealed: false,
+      guestMode: false,
+      gridChoice: "auto",
+      fillChoice: "full",
+      revealStyle: "vortex",
+    });
+    useStudio.getState().refreshPreview();
+    const small = useStudio.getState().matrix;
+    expect(small.gridSize).toBe(3);
+    expect(small.reveal).toBe("vortex");
+    expect(small.activeCount).toBe(3 ** 3);
+
+    const largeDraft: PayloadDraftItem = {
+      ...smallDraft,
+      id: "preview-large",
+      size: capacityForGridSize(3) + 1,
+    };
+    useStudio.setState({ drafts: [largeDraft] });
+    useStudio.getState().refreshPreview();
+    expect(useStudio.getState().matrix.gridSize).toBe(6);
   });
 });

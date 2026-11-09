@@ -428,6 +428,7 @@ export function VoxelField({
   const { material, uniforms } = useVoxelMaterial(design);
   const geometries = useMemo(() => buildGeometries(), []);
   const revealPulse = useStudio((state) => state.revealPulse);
+  const revealStyle = useStudio((state) => state.revealStyle);
   const [burstLayer, setBurstLayer] = useState<AnimationLayer | null>(null);
 
   useEffect(() => {
@@ -447,10 +448,11 @@ export function VoxelField({
       intensity: 1.35,
       axis: "z",
       mode: "slice",
+      explosion: revealStyle,
     });
     const timer = window.setTimeout(() => setBurstLayer(null), 3100);
     return () => window.clearTimeout(timer);
-  }, [revealPulse, timeRef]);
+  }, [revealPulse, timeRef, revealStyle]);
 
   const animationLayers = useMemo(
     () => (burstLayer ? [...layers, burstLayer] : layers),

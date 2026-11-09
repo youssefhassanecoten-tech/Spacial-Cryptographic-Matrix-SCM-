@@ -69,6 +69,14 @@ const SHAPE_ICONS: Record<ShapeType, ReactNode> = {
   pyramid: <Pyramid className="h-3.5 w-3.5" />,
   cross: <Cross className="h-3.5 w-3.5" />,
   shell: <Boxes className="h-3.5 w-3.5" />,
+  octahedron: <Gem className="h-3.5 w-3.5" />,
+  icosahedron: <Gem className="h-3.5 w-3.5" />,
+  dodecahedron: <Gem className="h-3.5 w-3.5" />,
+  hexPrism: <Boxes className="h-3.5 w-3.5" />,
+  ziggurat: <Layers className="h-3.5 w-3.5" />,
+  obelisk: <Cuboid className="h-3.5 w-3.5" />,
+  star: <Sparkles className="h-3.5 w-3.5" />,
+  crystal: <Gem className="h-3.5 w-3.5" />,
 };
 
 const PATTERN_ICONS: Record<PatternType, ReactNode> = {

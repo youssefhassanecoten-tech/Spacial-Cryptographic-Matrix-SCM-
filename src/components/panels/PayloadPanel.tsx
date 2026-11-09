@@ -24,6 +24,7 @@ import type { FillMode, GridSizeOption, PayloadKind } from "../../types";
 import { GRID_SIZE_OPTIONS } from "../../types";
 import { downloadBlob, safeFilename } from "../../lib/download";
 import type { PayloadDraftItem } from "../../lib/vault";
+import { capacityForGridSize } from "../../lib/scm";
 import {
   autoGridSizeForDrafts,
   resolveGridSize,
@@ -188,6 +189,7 @@ export function PayloadPanel() {
     effectiveSize ** 3,
     Math.max(1, totalSize),
   );
+  const tierCapacity = capacityForGridSize(effectiveSize);
   const gridOptions: Array<{ value: GridSizeOption; label: string }> = [
     { value: "auto", label: "Auto" },
     ...GRID_SIZE_OPTIONS.map((size) => ({
@@ -463,7 +465,7 @@ export function PayloadPanel() {
       <PanelSection
         icon={<Package className="h-3.5 w-3.5" />}
         title="Matrix Scale"
-        hint="Auto grows the lattice with payload size. Full fills every voxel; data count fills one voxel per payload byte, capped by the lattice."
+        hint="Auto grows when payload exceeds the lattice capacity: voxels × six faces × ~1.2 KB face shards, up to 64 MB at 21³. Full fills every voxel; data count fills one voxel per payload byte."
         action={<Badge tone="cyan">seal at {effectiveSize}³</Badge>}
       >
         <Segmented
@@ -500,6 +502,13 @@ export function PayloadPanel() {
                 : `${effectiveSize}³ · ${effectiveSize ** 3} voxels`
             }
             tone={gridChoice === "auto" ? "slate" : "violet"}
+          />
+          <StatRow
+            label="Tier capacity"
+            value={`${formatBytes(tierCapacity)} ${
+              totalSize > tierCapacity ? "· above tier" : "· fits"
+            }`}
+            tone={totalSize > tierCapacity ? "rose" : "emerald"}
           />
           <StatRow
             label="Fill target"

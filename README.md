@@ -28,6 +28,15 @@ Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³**.
 - **Face codes:** auto mode puts a maze micro-code on every active cube below 9³, and separate hidden-anchor points at 9³ and above. The Design tab can force all faces or turn them off.
 - Each marker is a content-derived maze shard rendered on one cube face. Full content remains in the private token and `.scm` package; the face layer is a distributed visual data surface, not a replacement for the package.
 
+## Live shape, fill, and reveal
+
+- The preview matrix reshapes live as payload items are added, edited, or removed.
+- **Auto** tiers use lattice capacity: voxels × six faces × face-shard capacity, reaching the 64 MB payload cap at 21A3.
+- **Full size** fills every voxel; **Data count** fills one voxel per payload byte.
+- Shape picker uses flat-faced solids: cube, pyramid, cross, shell, diamond, octahedron, icosahedron, dodecahedron, hex prism, ziggurat, obelisk, star, and crystal. Curved legacy masks remain readable but are hidden from the picker.
+- Face glyphs rotate through QR, constellation, circuit, and rune families.
+- Reveal explosions: radial, vortex, shatter, cascade, prism, and implode. The token carries a versioned `reveal: { v, type }` directive and falls back to radial for unknown types.
+
 ## QR and guest mode
 
 - The QR contains a **public shape token** (`SCMS1`) and never the private ID token.
@@ -105,7 +114,7 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Outputs: `release-electron/SCM-Studio-Setup-1.3.1.exe`, `release-electron/SCM-Studio-Portable-1.3.1.exe`, `latest.yml`, and the blockmap.
+Outputs: `release-electron/SCM-Studio-Setup-1.4.0.exe`, `release-electron/SCM-Studio-Portable-1.4.0.exe`, `latest.yml`, and the blockmap.
 
 Local copies live in `release/`. The NSIS installer supports automatic minor updates through `electron-updater`. The portable executable is unsigned, so Windows SmartScreen may warn on first launch, and portable builds do not self-update. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 

@@ -6,6 +6,20 @@ export const GRID_SIZE = DEFAULT_GRID_SIZE;
 export const BLOCK_SIZE = 3;
 export const VOXEL_COUNT = DEFAULT_GRID_SIZE ** 3;
 export const GRID_HALF = (DEFAULT_GRID_SIZE - 1) / 2;
+export const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+
+export type ExplosionType =
+  | "radial"
+  | "vortex"
+  | "shatter"
+  | "cascade"
+  | "prism"
+  | "implode";
+
+export interface RevealDirective {
+  v: number;
+  type: string;
+}
 
 export type Vec3 = [number, number, number];
 export type FillMode = "full" | "data";
@@ -40,6 +54,7 @@ export interface SCMMatrix {
   activeCount: number;
   fill?: FillMode;
   fillCount?: number;
+  reveal?: ExplosionType;
 }
 
 export type PayloadKind = "text" | "image" | "video" | "document";
@@ -89,6 +104,7 @@ export interface SCMShapePayload {
   shapeId: string;
   fill?: FillMode;
   fillCount?: number;
+  reveal?: RevealDirective;
 }
 
 export interface RevealedItem extends SCMPayloadItem {
@@ -113,6 +129,7 @@ export interface SCMTokenPayload {
   shapeId?: string;
   fill?: FillMode;
   fillCount?: number;
+  reveal?: RevealDirective;
   salt?: string;
   contentRoot?: string;
   manifest?: SCMPayloadManifest;
@@ -127,7 +144,15 @@ export type ShapeType =
   | "torus"
   | "pyramid"
   | "cross"
-  | "shell";
+  | "shell"
+  | "octahedron"
+  | "icosahedron"
+  | "dodecahedron"
+  | "hexPrism"
+  | "ziggurat"
+  | "obelisk"
+  | "star"
+  | "crystal";
 
 export type PatternType =
   | "none"
@@ -198,6 +223,7 @@ export interface AnimationLayer {
   intensity: number;
   axis: Axis;
   mode: WaveMode;
+  explosion?: ExplosionType;
 }
 
 export interface VerificationResult {

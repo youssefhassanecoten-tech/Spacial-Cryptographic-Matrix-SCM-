@@ -1,4 +1,5 @@
 import type {
+  ExplosionType,
   FillMode,
   SCMPayload,
   SCMPayloadManifest,
@@ -9,10 +10,13 @@ import type {
 } from "../types";
 import {
   DEFAULT_GRID_SIZE,
+  GRID_SIZE_OPTIONS,
   MAX_GRID_SIZE,
+  MAX_PAYLOAD_BYTES,
   MIN_GRID_SIZE,
 } from "../types";
 import { hashCell, mulberry32, randomId, randomSeed, seededShuffle } from "./rng";
+import { resolveExplosionType } from "./reveal";
 
 export function normalizeGridSize(value = DEFAULT_GRID_SIZE): number {
   const integer = Math.min(MAX_GRID_SIZE, Math.max(MIN_GRID_SIZE, Math.round(value)));
@@ -24,6 +28,24 @@ export function normalizeGridSize(value = DEFAULT_GRID_SIZE): number {
 
 export function worldSpacing(gridSize: number): number {
   return 8.8 / Math.max(1, gridSize - 0.2);
+}
+
+export const FACE_CAPACITY_BYTES = Math.ceil(
+  MAX_PAYLOAD_BYTES / (MAX_GRID_SIZE ** 3 * 6),
+);
+
+export function capacityForGridSize(gridSizeInput: number): number {
+  const gridSize = normalizeGridSize(gridSizeInput);
+  return gridSize ** 3 * 6 * FACE_CAPACITY_BYTES;
+}
+
+export function autoGridSizeForBytes(totalBytes: number): number {
+  for (const gridSize of GRID_SIZE_OPTIONS) {
+    if (totalBytes <= capacityForGridSize(gridSize)) {
+      return gridSize;
+    }
+  }
+  return MAX_GRID_SIZE;
 }
 
 export function voxelIndex(
@@ -156,6 +178,7 @@ export function createMatrixFromSeed(
   anchorsInput?: Vec3[],
   gridSizeInput = DEFAULT_GRID_SIZE,
   fillInput?: MatrixFill,
+  revealInput?: ExplosionType,
 ): SCMMatrix {
   const normalizedSeed = seed >>> 0;
   const gridSize = normalizeGridSize(gridSizeInput);
@@ -261,6 +284,7 @@ export function createMatrixFromSeed(
     activeCount,
     ...(fillInput ? { fill: fillInput.mode } : {}),
     ...(fillInput?.mode === "data" ? { fillCount: activeCount } : {}),
+    ...(revealInput ? { reveal: revealInput } : {}),
   };
 }
 
@@ -292,6 +316,7 @@ export function createNewMatrix(
   label = "Untitled Lattice",
   gridSize = DEFAULT_GRID_SIZE,
   fill?: MatrixFill,
+  reveal?: ExplosionType,
 ): SCMMatrix {
   const seed = randomSeed();
   return createMatrixFromSeed(
@@ -304,6 +329,7 @@ export function createNewMatrix(
     undefined,
     gridSize,
     fill,
+    reveal,
   );
 }
 
@@ -329,6 +355,7 @@ export function matrixToPayload(
     ...(matrix.fill === "data" && matrix.fillCount !== undefined
       ? { fillCount: matrix.fillCount }
       : {}),
+    ...(matrix.reveal ? { reveal: { v: 1, type: matrix.reveal } } : {}),
     ...(payload ? { payload } : {}),
     ...(extra?.shapeId ? { shapeId: extra.shapeId } : {}),
     ...(extra?.salt ? { salt: extra.salt } : {}),
@@ -349,6 +376,9 @@ export function matrixFromPayload(payload: SCMTokenPayload): SCMMatrix {
     payload.gridSize ?? DEFAULT_GRID_SIZE,
     payload.fill
       ? { mode: payload.fill, count: payload.fillCount }
+      : undefined,
+    payload.reveal
+      ? (resolveExplosionType(payload.reveal) as ExplosionType)
       : undefined,
   );
 }

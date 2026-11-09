@@ -3,6 +3,7 @@ import type {
   AnimationLayer,
   AnimationType,
   DesignState,
+  ExplosionType,
   FillMode,
   GridSizeOption,
   PayloadKind,
@@ -17,10 +18,14 @@ import {
   defaultAnimationLayers,
 } from "../lib/animation";
 import {
+  autoGridSizeForBytes,
   createBlankMatrix,
+  createMatrixFromSeed,
   createNewMatrix,
   normalizeGridSize,
+  stableHash,
 } from "../lib/scm";
+import { resolveExplosionType } from "../lib/reveal";
 import {
   MAX_TOTAL_PAYLOAD_BYTES,
   createEmptyVault,
@@ -127,6 +132,7 @@ export interface StudioState {
   activeTab: StudioTab;
   gridChoice: GridSizeOption;
   fillChoice: FillMode;
+  revealStyle: ExplosionType;
   sidebarCollapsed: boolean;
   toast: ToastState | null;
   drafts: PayloadDraftItem[];
@@ -152,6 +158,8 @@ export interface StudioState {
   setTab: (tab: StudioTab) => void;
   setGridChoice: (choice: GridSizeOption) => void;
   setFillChoice: (choice: FillMode) => void;
+  setRevealStyle: (style: ExplosionType) => void;
+  refreshPreview: () => void;
   toggleSidebar: () => void;
   notify: (message: string, tone?: ToastTone) => void;
   dismissToast: () => void;
@@ -221,11 +229,7 @@ function statsFromManifest(manifest: SCMPayloadManifest): SealedStats {
 
 export function autoGridSizeForDrafts(drafts: PayloadDraftItem[]): number {
   const total = drafts.reduce((sum, draft) => sum + draft.size, 0);
-  if (total <= 512 * 1024) return 9;
-  if (total <= 2 * 1024 * 1024) return 12;
-  if (total <= 8 * 1024 * 1024) return 15;
-  if (total <= 24 * 1024 * 1024) return 18;
-  return 21;
+  return autoGridSizeForBytes(total);
 }
 
 export function resolveGridSize(
@@ -253,6 +257,7 @@ export const useStudio = create<StudioState>((set, get) => ({
   activeTab: "design",
   gridChoice: "auto",
   fillChoice: "full",
+  revealStyle: "radial",
   sidebarCollapsed: false,
   toast: null,
   drafts: [],
@@ -339,6 +344,53 @@ export const useStudio = create<StudioState>((set, get) => ({
   setGridChoice: (gridChoice) => set({ gridChoice }),
 
   setFillChoice: (fillChoice) => set({ fillChoice }),
+
+  setRevealStyle: (revealStyle) => set({ revealStyle }),
+
+  refreshPreview: () => {
+    const state = get();
+    if (state.sealed || state.guestMode || state.drafts.length === 0) {
+      return;
+    }
+    const totalSize = state.drafts.reduce((sum, draft) => sum + draft.size, 0);
+    const gridSize = resolveGridSize(state.gridChoice, state.drafts);
+    const signature = stableHash(
+      state.drafts.flatMap((draft) => [
+        draft.kind,
+        draft.path,
+        draft.size,
+        draft.id,
+        draft.kind === "text"
+          ? new TextDecoder().decode(draft.bytes)
+          : "",
+      ]),
+    );
+    const seed = Number.parseInt(signature.slice(0, 8), 16) >>> 0;
+    const matrix = createMatrixFromSeed(
+      seed,
+      {
+        id: `scm_preview_${signature.slice(0, 12)}`,
+        label: state.matrix.label,
+        createdAt: new Date().toISOString(),
+      },
+      undefined,
+      gridSize,
+      {
+        mode: state.fillChoice,
+        count: state.fillChoice === "data" ? totalSize : undefined,
+      },
+      state.revealStyle,
+    );
+    set({
+      matrix,
+      token: "",
+      shapeToken: "",
+      tokenStatus: "idle",
+      tokenError: null,
+      sealedStats: null,
+      packageBlob: null,
+    });
+  },
 
   toggleSidebar: () =>
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
@@ -434,6 +486,7 @@ export const useStudio = create<StudioState>((set, get) => ({
         label ?? matrix.label,
         gridSize,
         get().fillChoice,
+        get().revealStyle,
       );
       const previous = sealedVersionFrom(token, shapeToken, packageBlob);
       get().timeRef.current = 0;
@@ -537,6 +590,7 @@ export const useStudio = create<StudioState>((set, get) => ({
       sealed: true,
       editing: false,
       reveal,
+      revealStyle: resolveExplosionType(result.shape.reveal),
       revealPulse: get().revealPulse + 1,
       playing: true,
     });
@@ -603,6 +657,7 @@ export const useStudio = create<StudioState>((set, get) => ({
       reveal: null,
       activeTab: "payload",
       playing: true,
+      revealStyle: resolveExplosionType(result.shape?.reveal),
     });
     get().notify(
       "Edit Studio unlocked. The previous token and package remain valid; re-seal to mint a new shape and token.",
@@ -626,10 +681,15 @@ export const useStudio = create<StudioState>((set, get) => ({
       }
     }
     const gridSize = resolveGridSize(get().gridChoice, []);
-    const matrix = createNewMatrix(label?.trim() || "Untitled SCM", gridSize, {
-      mode: get().fillChoice,
-      count: get().fillChoice === "data" ? 1 : undefined,
-    });
+    const matrix = createNewMatrix(
+      label?.trim() || "Untitled SCM",
+      gridSize,
+      {
+        mode: get().fillChoice,
+        count: get().fillChoice === "data" ? 1 : undefined,
+      },
+      get().revealStyle,
+    );
     const empty = await createEmptyVault(matrix);
     get().timeRef.current = 0;
     set({
@@ -676,6 +736,7 @@ export const useStudio = create<StudioState>((set, get) => ({
           tokenError: null,
           design: GUEST_DESIGN,
           layers: withAssembleLayers(defaultAnimationLayers()),
+          revealStyle: resolveExplosionType(shape.reveal),
           playing: true,
           activeTab: "decrypt",
           drafts: [],

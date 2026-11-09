@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { RevealedItem, RevealResult } from "../types";
 import { downloadBlob } from "../lib/download";
+import { EXPLOSION_LABELS } from "../lib/reveal";
 import { useStudio } from "../store/useStudio";
 import { Badge, Button } from "./ui";
 
@@ -148,6 +149,7 @@ function RevealItemCard({ item }: { item: RevealedItem }) {
 
 function RevealOverlayInner({ reveal }: { reveal: RevealResult }) {
   const closeReveal = useStudio((state) => state.closeReveal);
+  const revealStyle = useStudio((state) => state.revealStyle);
   const [stage, setStage] = useState<"solving" | "reveal">("solving");
   const [progress, setProgress] = useState(0);
 
@@ -219,7 +221,8 @@ function RevealOverlayInner({ reveal }: { reveal: RevealResult }) {
               </h2>
               <p className="mt-0.5 font-mono text-[9px] text-slate-500">
                 {reveal.items.length} item{reveal.items.length === 1 ? "" : "s"} ·{" "}
-                {reveal.packageLoaded ? "token + package" : "token only"} ·{" "}
+                {reveal.packageLoaded ? "token + package" : "token only"}{" / "}
+                {EXPLOSION_LABELS[revealStyle]} ·{" "}
                 {reveal.shape?.shapeId.slice(0, 12)}
               </p>
             </div>

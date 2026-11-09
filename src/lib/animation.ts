@@ -6,7 +6,7 @@ import type {
   Vec3,
   WaveMode,
 } from "../types";
-import { randomId } from "./rng";
+import { hashCell, randomId } from "./rng";
 import { worldSpacing } from "./scm";
 
 export const EASINGS: Record<EasingName, (t: number) => number> = {
@@ -120,8 +120,12 @@ export function computeVoxelAnimation(
     }
     switch (layer.type) {
       case "explode": {
+        const style = layer.explosion ?? "radial";
         const rank = matrix.orderRank[voxel.index] / (matrix.order.length || 1);
-        const start = rank * 0.5;
+        const start =
+          style === "cascade"
+            ? ((gridSize - 1 - voxel.y) / Math.max(1, gridSize - 1)) * 0.45
+            : rank * 0.5;
         const local = Math.max(0, Math.min(1, (phase.phase - start) / (1 - start)));
         const factor = Math.sin(Math.PI * local) * layer.intensity;
         const dx = voxel.x - half;
@@ -131,9 +135,51 @@ export function computeVoxelAnimation(
         const nx = length > 0.001 ? dx / length : 0;
         const ny = length > 0.001 ? dy / length : 1;
         const nz = length > 0.001 ? dz / length : 0;
-        out.offsetX += nx * factor * 3.4;
-        out.offsetY += ny * factor * 3.4;
-        out.offsetZ += nz * factor * 3.4;
+
+        if (style === "vortex") {
+          const tangentLength = Math.max(0.001, Math.sqrt(dx * dx + dz * dz));
+          out.offsetX += (nx * 1.4 - (dz / tangentLength) * 1.9) * factor * 2.2;
+          out.offsetY += (ny * 1.1 + 0.65) * factor * 2.2;
+          out.offsetZ += (nz * 1.4 + (dx / tangentLength) * 1.9) * factor * 2.2;
+        } else if (style === "shatter") {
+          const random = hashCell(
+            matrix.seed ^ 0x6a09e667,
+            voxel.x,
+            voxel.y,
+            voxel.z,
+          ) / 0xffffffff;
+          const angle = random * Math.PI * 2;
+          const elevation = Math.acos(2 * (random * 7.13 - Math.floor(random * 7.13)) - 1);
+          const sinElevation = Math.sin(elevation);
+          out.offsetX += Math.cos(angle) * sinElevation * factor * 4.6;
+          out.offsetY += Math.cos(elevation) * factor * 4.6;
+          out.offsetZ += Math.sin(angle) * sinElevation * factor * 4.6;
+          out.scale *= 1 - local * 0.42;
+        } else if (style === "cascade") {
+          out.offsetY += factor * 3.8;
+          out.offsetX += dx * factor * 0.55;
+          out.offsetZ += dz * factor * 0.55;
+          out.scale *= 1 - local * 0.18;
+        } else if (style === "prism") {
+          const useX = Math.abs(dx) >= Math.abs(dz);
+          const side = useX ? Math.sign(dx) || 1 : Math.sign(dz) || 1;
+          if (useX) {
+            out.offsetX += side * factor * 3.6;
+          } else {
+            out.offsetZ += side * factor * 3.6;
+          }
+          out.offsetY += ny * factor * 0.8;
+        } else if (style === "implode") {
+          out.offsetX -= nx * factor * 2.8;
+          out.offsetY -= ny * factor * 2.8;
+          out.offsetZ -= nz * factor * 2.8;
+          out.scale *= 1 - local * 0.55;
+          out.glow *= 1 + local * 1.2;
+        } else {
+          out.offsetX += nx * factor * 3.4;
+          out.offsetY += ny * factor * 3.4;
+          out.offsetZ += nz * factor * 3.4;
+        }
         break;
       }
       case "layerWave": {

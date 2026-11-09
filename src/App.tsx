@@ -26,6 +26,11 @@ let bootstrapped = false;
 export default function App() {
   const guestMode = useStudio((state) => state.guestMode);
   const sidebarCollapsed = useStudio((state) => state.sidebarCollapsed);
+  const drafts = useStudio((state) => state.drafts);
+  const sealed = useStudio((state) => state.sealed);
+  const gridChoice = useStudio((state) => state.gridChoice);
+  const fillChoice = useStudio((state) => state.fillChoice);
+  const revealStyle = useStudio((state) => state.revealStyle);
 
   useEffect(() => {
     if (bootstrapped) {
@@ -34,6 +39,16 @@ export default function App() {
     bootstrapped = true;
     void useStudio.getState().bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (sealed || guestMode) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      useStudio.getState().refreshPreview();
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [drafts, sealed, guestMode, gridChoice, fillChoice, revealStyle]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

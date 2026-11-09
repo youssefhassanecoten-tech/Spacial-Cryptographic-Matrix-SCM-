@@ -233,6 +233,15 @@ function validatePayload(value: unknown): SCMTokenPayload {
   if (payload.fill === "data" && payload.fillCount === undefined) {
     throw new Error("Token data fill is missing its voxel target.");
   }
+  if (
+    payload.reveal !== undefined &&
+    (typeof payload.reveal !== "object" ||
+      payload.reveal === null ||
+      typeof payload.reveal.v !== "number" ||
+      typeof payload.reveal.type !== "string")
+  ) {
+    throw new Error("Token reveal animation directive is invalid.");
+  }
   if (payload.salt !== undefined && typeof payload.salt !== "string") {
     throw new Error("Token content salt is invalid.");
   }
@@ -256,6 +265,9 @@ function validatePayload(value: unknown): SCMTokenPayload {
     ...(payload.fill ? { fill: payload.fill } : {}),
     ...(payload.fill === "data" && payload.fillCount !== undefined
       ? { fillCount: payload.fillCount }
+      : {}),
+    ...(payload.reveal
+      ? { reveal: { v: payload.reveal.v, type: payload.reveal.type } }
       : {}),
     ...(payload.salt ? { salt: payload.salt } : {}),
     ...(payload.contentRoot ? { contentRoot: payload.contentRoot } : {}),
