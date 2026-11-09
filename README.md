@@ -36,6 +36,7 @@ Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³**.
 - Shape picker uses flat-faced solids: cube, pyramid, cross, shell, diamond, octahedron, icosahedron, dodecahedron, hex prism, ziggurat, obelisk, star, and crystal. Curved legacy masks remain readable but are hidden from the picker.
 - Face glyphs rotate through QR, constellation, circuit, and rune families.
 - Reveal explosions: radial, vortex, shatter, cascade, prism, and implode. The token carries a versioned `reveal: { v, type }` directive and falls back to radial for unknown types.
+- `.scm` package archives are gzip-compressed before AES-GCM encryption when that reduces size; the package header records the codec for transparent restore.
 
 ## QR and guest mode
 
@@ -114,7 +115,7 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Outputs: `release-electron/SCM-Studio-Setup-1.4.0.exe`, `release-electron/SCM-Studio-Portable-1.4.0.exe`, `latest.yml`, and the blockmap.
+Outputs: `release-electron/SCM-Studio-Setup-1.4.1.exe`, `release-electron/SCM-Studio-Portable-1.4.1.exe`, `latest.yml`, and the blockmap.
 
 Local copies live in `release/`. The NSIS installer supports automatic minor updates through `electron-updater`. The portable executable is unsigned, so Windows SmartScreen may warn on first launch, and portable builds do not self-update. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 

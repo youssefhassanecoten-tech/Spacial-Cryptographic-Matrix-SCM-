@@ -92,6 +92,35 @@ interface PackageHeader {
   contentRoot: string;
   iv: string;
   archiveSize: number;
+  compression?: "gzip";
+}
+
+async function gzipBytes(
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (typeof CompressionStream === "undefined") {
+    return null;
+  }
+  try {
+    const stream = new Blob([bytes])
+      .stream()
+      .pipeThrough(new CompressionStream("gzip"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+async function gunzipBytes(
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer>> {
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("This browser cannot decompress the SCM package.");
+  }
+  const stream = new Blob([bytes])
+    .stream()
+    .pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 const textEncoder = new TextEncoder();
@@ -527,12 +556,21 @@ export async function buildPackage(
     archive.set(draft.bytes, cursor);
     cursor += draft.size;
   }
+  const compressed = await gzipBytes(archive);
+  const stored =
+    compressed && compressed.byteLength < archive.byteLength
+      ? compressed
+      : archive;
+  const compression =
+    compressed && compressed.byteLength < archive.byteLength
+      ? "gzip"
+      : undefined;
   const key = await deriveContentKey(salt, contentRoot);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipher = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
-    archive,
+    stored,
   );
   const header: PackageHeader = {
     v: 1,
@@ -541,6 +579,7 @@ export async function buildPackage(
     contentRoot,
     iv: bytesToBase64Url(iv),
     archiveSize: archive.byteLength,
+    ...(compression ? { compression } : {}),
   };
   const headerBytes = textEncoder.encode(JSON.stringify(header));
   const magic = textEncoder.encode(PACKAGE_MAGIC);
@@ -582,7 +621,8 @@ export async function parsePackage(
     header.v !== 1 ||
     header.tokenId !== tokenId ||
     header.shapeId !== shapeId ||
-    header.contentRoot !== contentRoot
+    header.contentRoot !== contentRoot ||
+    (header.compression !== undefined && header.compression !== "gzip")
   ) {
     throw new Error("SCM package does not belong to this token.");
   }
@@ -598,7 +638,10 @@ export async function parsePackage(
   } catch {
     throw new Error("SCM package authentication failed.");
   }
-  const archive = new Uint8Array(archiveBytes);
+  let archive = new Uint8Array(archiveBytes);
+  if (header.compression === "gzip") {
+    archive = await gunzipBytes(archive);
+  }
   if (archive.length < 4) {
     throw new Error("SCM package archive is empty.");
   }

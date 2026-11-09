@@ -546,3 +546,38 @@ describe("Phase 10 live preview", () => {
     expect(useStudio.getState().matrix.gridSize).toBe(6);
   });
 });
+
+describe("Phase 11 package compression", () => {
+  it("gzip-compresses package archives before encryption and restores them", async () => {
+    const bytes = new Uint8Array(20000).fill(65);
+    const draft: PayloadDraftItem = {
+      id: "compress-doc",
+      kind: "document",
+      name: "compress.txt",
+      path: "compress.txt",
+      mime: "text/plain",
+      size: bytes.byteLength,
+      bytes,
+    };
+    const artifacts = await sealVault([draft], "Compressed", 9, "full");
+    expect(artifacts.packageBlob).not.toBeNull();
+    const buffer = await artifacts.packageBlob!.arrayBuffer();
+    const raw = new Uint8Array(buffer);
+    const headerLength = new DataView(buffer).getUint32(5, true);
+    const header = JSON.parse(
+      new TextDecoder().decode(raw.subarray(9, 9 + headerLength)),
+    ) as { compression?: string };
+    expect(header.compression).toBe("gzip");
+    expect(raw.byteLength).toBeLessThan(20000);
+
+    const unlocked = await unlockVault({
+      token: artifacts.token,
+      packageInput: artifacts.packageBlob,
+    });
+    expect(unlocked.ok).toBe(true);
+    const file = unlocked.items?.find((item) => item.kind === "document");
+    const restored = new Uint8Array(await file!.blob!.arrayBuffer());
+    expect(restored.length).toBe(20000);
+    expect(restored[0]).toBe(65);
+  });
+});

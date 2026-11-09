@@ -1,11 +1,11 @@
 {
-  "version": "1.4.0",
-  "notes": "Live shape preview, capacity-based auto sizing, 13 flat-faced shapes, richer face glyphs, six token-versioned reveal explosions, and an always-available Decrypt token input.",
-  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.4.0",
+  "version": "1.4.1",
+  "notes": "Surface-mapped glyphs across all six face directions, distinct shell and hex-prism silhouettes, glyph complexity that evolves with lattice fill, and gzip compression for .scm packages before encryption.",
+  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.4.1",
   "downloads": {
     "web": "https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/",
-    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.4.0/SCM-Studio-1.4.0.apk",
-    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.4.0/SCM-Studio-Setup-1.4.0.exe",
-    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.4.0"
+    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.4.1/SCM-Studio-1.4.1.apk",
+    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.4.1/SCM-Studio-Setup-1.4.1.exe",
+    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.4.1"
   }
 }

@@ -169,7 +169,9 @@ export function shapeMask(
         Math.abs(dy),
         Math.abs(dz),
       );
-      return smoothstep(0.525, 0.75, maxCorner);
+      const outer = smoothstep(0.525, 0.75, maxCorner);
+      const lattice = (coord[0] + coord[1] + coord[2]) % 2 === 0 ? 1 : 0.16;
+      return outer * lattice;
     }
     case "octahedron": {
       const distance = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
@@ -185,7 +187,9 @@ export function shapeMask(
     }
     case "hexPrism": {
       const hex = axialHexDistance(dx, dz);
-      return 1 - smoothstep(0.9, 1.02, hex);
+      const bevel = 1 - smoothstep(0.78, 0.98, hex);
+      const cap = 1 - smoothstep(0.88, 1.0, Math.abs(dy));
+      return bevel * cap;
     }
     case "ziggurat": {
       const t = (dy + 1) / 2;
