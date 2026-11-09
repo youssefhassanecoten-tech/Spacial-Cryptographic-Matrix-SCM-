@@ -1,12 +1,13 @@
 import {
   Anchor,
   Grid3X3,
+  Plus,
   Rotate3D,
   Route,
   ShieldAlert,
 } from "lucide-react";
 import { useStudio } from "../store/useStudio";
-import { IconButton } from "./ui";
+import { Button, IconButton } from "./ui";
 
 const GEOMETRY_LABEL = {
   classic: "Classic voxel",
@@ -25,9 +26,31 @@ export function CanvasOverlay() {
   const design = useStudio((state) => state.design);
   const matrix = useStudio((state) => state.matrix);
   const setDesign = useStudio((state) => state.setDesign);
+  const newSCM = useStudio((state) => state.newSCM);
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-3">
+      {matrix.activeCount === 0 ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+          <div className="pointer-events-auto max-w-xs rounded-2xl border border-cyan-400/20 bg-[#050910]/85 px-5 py-4 text-center backdrop-blur-xl">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
+              Empty lattice
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+              No shape is loaded. Add payload and seal, or start a new SCM.
+            </p>
+            <Button
+              size="sm"
+              variant="primary"
+              className="mt-3"
+              onClick={() => void newSCM()}
+            >
+              <Plus className="h-3 w-3" />
+              New SCM
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <div className="flex items-start justify-between gap-2">
         <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#050910]/75 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-slate-300 backdrop-blur">

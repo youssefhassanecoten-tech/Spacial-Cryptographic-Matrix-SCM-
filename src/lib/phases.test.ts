@@ -13,6 +13,7 @@ import {
 } from "./crypto";
 import {
   bitstreamSignature,
+  createBlankMatrix,
   createMatrixFromSeed,
   indexToCoord,
   matrixFromPayload,
@@ -23,6 +24,7 @@ import { buildTrajectory, manhattanAdjacent, validateTrajectory } from "./trajec
 import {
   buildGuestLink,
   decodeShapeToken,
+  matrixFromShape,
   sealVault,
   unlockVault,
   type PayloadDraftItem,
@@ -400,5 +402,68 @@ describe("Phase 7 scalable lattice", () => {
     expect(faces[0].gridSize).toBe(21);
     expect(faces[0].cells).toHaveLength(21 ** 2);
     expect(faceMapSvg(faces[0])).toContain("MATRIX");
+  });
+});
+
+describe("Phase 8 volume fill", () => {
+  const draft = (text: string): PayloadDraftItem => ({
+    id: "fill-text",
+    kind: "text",
+    name: "fill.txt",
+    path: "fill.txt",
+    mime: "text/plain",
+    size: new TextEncoder().encode(text).byteLength,
+    bytes: new TextEncoder().encode(text),
+  });
+
+  it("starts with a blank matrix", () => {
+    const blank = createBlankMatrix();
+    expect(blank.activeCount).toBe(0);
+    expect(blank.bits.every((bit) => bit === 0)).toBe(true);
+    expect(blank.path).toHaveLength(0);
+  });
+
+  it("fills every voxel in full mode", () => {
+    const full = createMatrixFromSeed(SEED, META, undefined, 9, {
+      mode: "full",
+    });
+    expect(full.activeCount).toBe(9 ** 3);
+    expect(full.bits.every((bit) => bit === 1)).toBe(true);
+    expect(full.fill).toBe("full");
+  });
+
+  it("fills to a data target and reproduces it from the shape token", async () => {
+    const data = createMatrixFromSeed(SEED, META, undefined, 9, {
+      mode: "data",
+      count: 120,
+    });
+    expect(data.activeCount).toBeGreaterThanOrEqual(120);
+    expect(data.fill).toBe("data");
+    expect(data.fillCount).toBe(data.activeCount);
+
+    const rebuilt = createMatrixFromSeed(
+      SEED,
+      META,
+      data.anchors.map((anchor) => anchor.coord),
+      9,
+      { mode: "data", count: data.fillCount },
+    );
+    expect(bitstreamSignature(rebuilt)).toBe(bitstreamSignature(data));
+
+    const artifacts = await sealVault([draft("data fill note")], "Data fill", 9, "data");
+    expect(artifacts.shape.fill).toBe("data");
+    expect(artifacts.matrix.fill).toBe("data");
+    const shape = decodeShapeToken(artifacts.shapeToken);
+    expect(shape.fill).toBe("data");
+    expect(shape.fillCount).toBe(artifacts.matrix.activeCount);
+    const fromShape = matrixFromShape(shape);
+    expect(bitstreamSignature(fromShape)).toBe(bitstreamSignature(artifacts.matrix));
+    const unlocked = await unlockVault({
+      token: artifacts.token,
+      expectedShape: shape,
+    });
+    expect(unlocked.ok).toBe(true);
+    const text = unlocked.items?.find((item) => item.kind === "text");
+    expect(await text?.blob?.text()).toBe("data fill note");
   });
 });

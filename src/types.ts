@@ -8,6 +8,7 @@ export const VOXEL_COUNT = DEFAULT_GRID_SIZE ** 3;
 export const GRID_HALF = (DEFAULT_GRID_SIZE - 1) / 2;
 
 export type Vec3 = [number, number, number];
+export type FillMode = "full" | "data";
 export type GridSizeOption =
   | "auto"
   | "3"
@@ -37,6 +38,8 @@ export interface SCMMatrix {
   order: number[];
   orderRank: Uint16Array;
   activeCount: number;
+  fill?: FillMode;
+  fillCount?: number;
 }
 
 export type PayloadKind = "text" | "image" | "video" | "document";
@@ -84,6 +87,8 @@ export interface SCMShapePayload {
   gridSize: number;
   anchors: Vec3[];
   shapeId: string;
+  fill?: FillMode;
+  fillCount?: number;
 }
 
 export interface RevealedItem extends SCMPayloadItem {
@@ -106,6 +111,8 @@ export interface SCMTokenPayload {
   gridSize?: number;
   anchors: Vec3[];
   shapeId?: string;
+  fill?: FillMode;
+  fillCount?: number;
   salt?: string;
   contentRoot?: string;
   manifest?: SCMPayloadManifest;

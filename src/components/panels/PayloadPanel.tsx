@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { GridSizeOption, PayloadKind } from "../../types";
+import type { FillMode, GridSizeOption, PayloadKind } from "../../types";
 import { GRID_SIZE_OPTIONS } from "../../types";
 import { downloadBlob, safeFilename } from "../../lib/download";
 import type { PayloadDraftItem } from "../../lib/vault";
@@ -154,6 +154,8 @@ export function PayloadPanel() {
   const notify = useStudio((state) => state.notify);
   const gridChoice = useStudio((state) => state.gridChoice);
   const setGridChoice = useStudio((state) => state.setGridChoice);
+  const fillChoice = useStudio((state) => state.fillChoice);
+  const setFillChoice = useStudio((state) => state.setFillChoice);
 
   const [text, setText] = useState("");
   const [label, setLabel] = useState(matrix.label);
@@ -182,6 +184,10 @@ export function PayloadPanel() {
   const packageEstimate = totalSize - embeddedEstimate;
   const autoSize = autoGridSizeForDrafts(drafts);
   const effectiveSize = resolveGridSize(gridChoice, drafts);
+  const dataTarget = Math.min(
+    effectiveSize ** 3,
+    Math.max(1, totalSize),
+  );
   const gridOptions: Array<{ value: GridSizeOption; label: string }> = [
     { value: "auto", label: "Auto" },
     ...GRID_SIZE_OPTIONS.map((size) => ({
@@ -457,7 +463,7 @@ export function PayloadPanel() {
       <PanelSection
         icon={<Package className="h-3.5 w-3.5" />}
         title="Matrix Scale"
-        hint="Auto grows the lattice with payload size. 3³ and 6³ are manual mini modes with a face code on every active cube; 9³ and above use separate hidden-anchor points."
+        hint="Auto grows the lattice with payload size. Full fills every voxel; data count fills one voxel per payload byte, capped by the lattice."
         action={<Badge tone="cyan">seal at {effectiveSize}³</Badge>}
       >
         <Segmented
@@ -466,6 +472,20 @@ export function PayloadPanel() {
           options={gridOptions}
           columns={4}
         />
+        <div className="mt-3">
+          <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+            Volume fill
+          </p>
+          <Segmented
+            value={fillChoice}
+            onChange={(choice) => setFillChoice(choice as FillMode)}
+            options={[
+              { value: "full", label: "Full size" },
+              { value: "data", label: "Data count" },
+            ]}
+            columns={2}
+          />
+        </div>
         <div className="mt-2 rounded-lg border border-white/[0.05] bg-black/20 p-2">
           <StatRow
             label="Auto target"
@@ -480,6 +500,15 @@ export function PayloadPanel() {
                 : `${effectiveSize}³ · ${effectiveSize ** 3} voxels`
             }
             tone={gridChoice === "auto" ? "slate" : "violet"}
+          />
+          <StatRow
+            label="Fill target"
+            value={
+              fillChoice === "full"
+                ? `${effectiveSize ** 3} voxels`
+                : `${dataTarget} voxels`
+            }
+            tone={fillChoice === "full" ? "emerald" : "amber"}
           />
           <StatRow
             label="Face codes"

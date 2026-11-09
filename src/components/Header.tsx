@@ -28,8 +28,8 @@ export function Header() {
   const [busy, setBusy] = useState(false);
 
   const share = async () => {
-    if (!shapeToken) {
-      notify("Shape token is still being generated.", "error");
+    if (matrix.activeCount === 0 || !shapeToken) {
+      notify("No shape yet. Add payload and seal, or start a new SCM.", "error");
       return;
     }
     const ok = await copyText(buildGuestLink(shapeToken));

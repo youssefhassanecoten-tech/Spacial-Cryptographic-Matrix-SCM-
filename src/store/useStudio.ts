@@ -3,6 +3,7 @@ import type {
   AnimationLayer,
   AnimationType,
   DesignState,
+  FillMode,
   GridSizeOption,
   PayloadKind,
   RevealResult,
@@ -16,7 +17,7 @@ import {
   defaultAnimationLayers,
 } from "../lib/animation";
 import {
-  createMatrixFromSeed,
+  createBlankMatrix,
   createNewMatrix,
   normalizeGridSize,
 } from "../lib/scm";
@@ -36,16 +37,7 @@ import {
   type SealArtifacts,
 } from "../lib/vault";
 
-const GENESIS_SEED = 0x5c4d1a7b;
-const GENESIS_ID = "scm_genesis_0001";
-const GENESIS_LABEL = "Genesis Lattice";
-const GENESIS_CREATED_AT = "2026-01-01T00:00:00.000Z";
-
-const initialMatrix = createMatrixFromSeed(GENESIS_SEED, {
-  id: GENESIS_ID,
-  label: GENESIS_LABEL,
-  createdAt: GENESIS_CREATED_AT,
-});
+const initialMatrix = createBlankMatrix();
 
 export const DEFAULT_DESIGN: DesignState = {
   geometry: "classic",
@@ -134,6 +126,7 @@ export interface StudioState {
   timeRef: { current: number };
   activeTab: StudioTab;
   gridChoice: GridSizeOption;
+  fillChoice: FillMode;
   sidebarCollapsed: boolean;
   toast: ToastState | null;
   drafts: PayloadDraftItem[];
@@ -158,6 +151,7 @@ export interface StudioState {
   setSpeed: (speed: number) => void;
   setTab: (tab: StudioTab) => void;
   setGridChoice: (choice: GridSizeOption) => void;
+  setFillChoice: (choice: FillMode) => void;
   toggleSidebar: () => void;
   notify: (message: string, tone?: ToastTone) => void;
   dismissToast: () => void;
@@ -258,6 +252,7 @@ export const useStudio = create<StudioState>((set, get) => ({
   timeRef: { current: 0 },
   activeTab: "design",
   gridChoice: "auto",
+  fillChoice: "full",
   sidebarCollapsed: false,
   toast: null,
   drafts: [],
@@ -342,6 +337,8 @@ export const useStudio = create<StudioState>((set, get) => ({
   setTab: (tab) => set({ activeTab: tab }),
 
   setGridChoice: (gridChoice) => set({ gridChoice }),
+
+  setFillChoice: (fillChoice) => set({ fillChoice }),
 
   toggleSidebar: () =>
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
@@ -436,6 +433,7 @@ export const useStudio = create<StudioState>((set, get) => ({
         drafts,
         label ?? matrix.label,
         gridSize,
+        get().fillChoice,
       );
       const previous = sealedVersionFrom(token, shapeToken, packageBlob);
       get().timeRef.current = 0;
@@ -628,7 +626,10 @@ export const useStudio = create<StudioState>((set, get) => ({
       }
     }
     const gridSize = resolveGridSize(get().gridChoice, []);
-    const matrix = createNewMatrix(label?.trim() || "Untitled SCM", gridSize);
+    const matrix = createNewMatrix(label?.trim() || "Untitled SCM", gridSize, {
+      mode: get().fillChoice,
+      count: get().fillChoice === "data" ? 1 : undefined,
+    });
     const empty = await createEmptyVault(matrix);
     get().timeRef.current = 0;
     set({
@@ -689,20 +690,8 @@ export const useStudio = create<StudioState>((set, get) => ({
         get().notify("The SCM shape link is invalid or corrupt.", "error");
       }
     }
-    if (get().token) {
-      return;
-    }
-    try {
-      const empty = await createEmptyVault(get().matrix);
-      set({
-        token: empty.token,
-        shapeToken: empty.shapeToken,
-        tokenStatus: "ready",
-        tokenError: null,
-        sealedStats: null,
-      });
-    } catch {
-      set({ tokenStatus: "error", tokenError: "Unable to initialize the token engine." });
+    if (!get().token) {
+      set({ tokenStatus: "idle", tokenError: null });
     }
   },
 

@@ -217,6 +217,22 @@ function validatePayload(value: unknown): SCMTokenPayload {
   if (payload.shapeId !== undefined && typeof payload.shapeId !== "string") {
     throw new Error("Token shape commitment is invalid.");
   }
+  if (
+    payload.fill !== undefined &&
+    payload.fill !== "full" &&
+    payload.fill !== "data"
+  ) {
+    throw new Error("Token fill mode is invalid.");
+  }
+  if (
+    payload.fillCount !== undefined &&
+    (!Number.isInteger(payload.fillCount) || payload.fillCount < 1)
+  ) {
+    throw new Error("Token fill count is invalid.");
+  }
+  if (payload.fill === "data" && payload.fillCount === undefined) {
+    throw new Error("Token data fill is missing its voxel target.");
+  }
   if (payload.salt !== undefined && typeof payload.salt !== "string") {
     throw new Error("Token content salt is invalid.");
   }
@@ -237,6 +253,10 @@ function validatePayload(value: unknown): SCMTokenPayload {
     gridSize,
     anchors: payload.anchors.map((anchor) => [anchor[0], anchor[1], anchor[2]]),
     ...(payload.shapeId ? { shapeId: payload.shapeId } : {}),
+    ...(payload.fill ? { fill: payload.fill } : {}),
+    ...(payload.fill === "data" && payload.fillCount !== undefined
+      ? { fillCount: payload.fillCount }
+      : {}),
     ...(payload.salt ? { salt: payload.salt } : {}),
     ...(payload.contentRoot ? { contentRoot: payload.contentRoot } : {}),
     ...(payload.manifest ? { manifest: validateManifest(payload.manifest) } : {}),

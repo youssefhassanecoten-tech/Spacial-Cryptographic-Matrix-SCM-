@@ -1,4 +1,5 @@
 import type {
+  FillMode,
   PayloadKind,
   RevealedItem,
   SCMShapePayload,
@@ -252,6 +253,8 @@ export function shapeIdFor(
   seed: number,
   anchors: Vec3[],
   gridSize: number,
+  fill?: FillMode,
+  fillCount?: number,
 ): string {
   return stableHash([
     "scm-shape-v2",
@@ -259,6 +262,8 @@ export function shapeIdFor(
     seed,
     gridSize,
     ...anchors.flat(),
+    ...(fill ? ["fill", fill] : []),
+    ...(fill === "data" ? ["count", fillCount ?? 0] : []),
   ]);
 }
 
@@ -273,7 +278,18 @@ export function createShapePayload(matrix: SCMMatrix): SCMShapePayload {
     createdAt: matrix.createdAt,
     gridSize: matrix.gridSize,
     anchors,
-    shapeId: shapeIdFor(matrix.id, matrix.seed, anchors, matrix.gridSize),
+    shapeId: shapeIdFor(
+      matrix.id,
+      matrix.seed,
+      anchors,
+      matrix.gridSize,
+      matrix.fill,
+      matrix.fillCount,
+    ),
+    ...(matrix.fill ? { fill: matrix.fill } : {}),
+    ...(matrix.fill === "data" && matrix.fillCount !== undefined
+      ? { fillCount: matrix.fillCount }
+      : {}),
   };
 }
 
@@ -289,7 +305,18 @@ export function shapeFromPrivateToken(payload: SCMTokenPayload): SCMShapePayload
     createdAt: payload.createdAt,
     gridSize,
     anchors,
-    shapeId: shapeIdFor(payload.id, payload.seed, anchors, gridSize),
+    shapeId: shapeIdFor(
+      payload.id,
+      payload.seed,
+      anchors,
+      gridSize,
+      payload.fill,
+      payload.fillCount,
+    ),
+    ...(payload.fill ? { fill: payload.fill } : {}),
+    ...(payload.fill === "data" && payload.fillCount !== undefined
+      ? { fillCount: payload.fillCount }
+      : {}),
   };
 }
 
@@ -319,7 +346,13 @@ export function decodeShapeToken(token: string): SCMShapePayload {
     typeof parsed.seed !== "number" ||
     typeof parsed.gridSize !== "number" ||
     !Array.isArray(parsed.anchors) ||
-    parsed.anchors.length !== 3
+    parsed.anchors.length !== 3 ||
+    (parsed.fill !== undefined &&
+      parsed.fill !== "full" &&
+      parsed.fill !== "data") ||
+    (parsed.fillCount !== undefined &&
+      (!Number.isInteger(parsed.fillCount) || parsed.fillCount < 1)) ||
+    (parsed.fill === "data" && parsed.fillCount === undefined)
   ) {
     throw new Error("SCM shape token is incomplete.");
   }
@@ -341,6 +374,8 @@ export function decodeShapeToken(token: string): SCMShapePayload {
     parsed.seed >>> 0,
     parsed.anchors.map((anchor) => [...anchor] as Vec3),
     parsed.gridSize,
+    parsed.fill,
+    parsed.fillCount,
   );
   if (parsed.shapeId !== expected) {
     throw new Error("SCM shape token integrity check failed.");
@@ -378,6 +413,9 @@ export function matrixFromShape(shape: SCMShapePayload): SCMMatrix {
     },
     shape.anchors,
     shape.gridSize,
+    shape.fill
+      ? { mode: shape.fill, count: shape.fillCount }
+      : undefined,
   );
 }
 
@@ -570,6 +608,7 @@ export async function sealVault(
   drafts: PayloadDraftItem[],
   label: string,
   gridSizeInput = 9,
+  fillMode: FillMode = "full",
 ): Promise<SealArtifacts> {
   if (drafts.length === 0) {
     throw new Error("Add at least one text or file item before sealing.");
@@ -583,11 +622,16 @@ export async function sealVault(
   const anchors = deriveAnchors(seed, gridSize).map(
     (anchor) => [...anchor.coord] as Vec3,
   );
+  const dataCount = Math.min(
+    gridSize ** 3,
+    Math.max(1, manifest.totalSize),
+  );
   const matrix = createMatrixFromSeed(
     seed,
     { id, label: label.trim() || "Sealed SCM", createdAt },
     anchors,
     gridSize,
+    { mode: fillMode, count: fillMode === "data" ? dataCount : undefined },
   );
   const shape = createShapePayload(matrix);
   const payload = privatePayloadFor(

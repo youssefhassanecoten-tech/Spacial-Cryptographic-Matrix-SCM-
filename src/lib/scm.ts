@@ -1,4 +1,5 @@
 import type {
+  FillMode,
   SCMPayload,
   SCMPayloadManifest,
   SCMAnchor,
@@ -144,11 +145,17 @@ function ensureBlockFloor(bits: Uint8Array, seed: number, gridSize: number): voi
   }
 }
 
+export interface MatrixFill {
+  mode: FillMode;
+  count?: number;
+}
+
 export function createMatrixFromSeed(
   seed: number,
   meta: { id: string; label: string; createdAt: string },
   anchorsInput?: Vec3[],
   gridSizeInput = DEFAULT_GRID_SIZE,
+  fillInput?: MatrixFill,
 ): SCMMatrix {
   const normalizedSeed = seed >>> 0;
   const gridSize = normalizeGridSize(gridSizeInput);
@@ -163,34 +170,45 @@ export function createMatrixFromSeed(
     : deriveAnchors(normalizedSeed, gridSize);
 
   const bits = new Uint8Array(voxelCount);
-  const rng = mulberry32(normalizedSeed ^ 0x9e3779b9);
-  for (let z = 0; z < gridSize; z += 1) {
-    for (let y = 0; y < gridSize; y += 1) {
-      for (let x = 0; x < gridSize; x += 1) {
-        const dx = x - half;
-        const dy = y - half;
-        const dz = z - half;
-        const distanceNorm =
-          Math.sqrt(dx * dx + dy * dy + dz * dz) /
-          (Math.sqrt(3) * Math.max(half, 1));
-        const probability = 0.27 + distanceNorm * 0.13;
-        if (rng() < probability) {
-          bits[voxelIndex(x, y, z, gridSize)] = 1;
+  if (fillInput?.mode === "full") {
+    bits.fill(1);
+  } else if (!fillInput) {
+    const rng = mulberry32(normalizedSeed ^ 0x9e3779b9);
+    for (let z = 0; z < gridSize; z += 1) {
+      for (let y = 0; y < gridSize; y += 1) {
+        for (let x = 0; x < gridSize; x += 1) {
+          const dx = x - half;
+          const dy = y - half;
+          const dz = z - half;
+          const distanceNorm =
+            Math.sqrt(dx * dx + dy * dy + dz * dz) /
+            (Math.sqrt(3) * Math.max(half, 1));
+          const probability = 0.27 + distanceNorm * 0.13;
+          if (rng() < probability) {
+            bits[voxelIndex(x, y, z, gridSize)] = 1;
+          }
         }
       }
     }
-  }
 
-  const blocksPerAxis = Math.floor(gridSize / 3);
-  for (let bz = 0; bz < blocksPerAxis; bz += 1) {
-    for (let by = 0; by < blocksPerAxis; by += 1) {
-      for (let bx = 0; bx < blocksPerAxis; bx += 1) {
-        bits[voxelIndex(bx * 3 + 1, by * 3 + 1, bz * 3 + 1, gridSize)] = 1;
+    const blocksPerAxis = Math.floor(gridSize / 3);
+    for (let bz = 0; bz < blocksPerAxis; bz += 1) {
+      for (let by = 0; by < blocksPerAxis; by += 1) {
+        for (let bx = 0; bx < blocksPerAxis; bx += 1) {
+          bits[voxelIndex(bx * 3 + 1, by * 3 + 1, bz * 3 + 1, gridSize)] = 1;
+        }
       }
     }
+
+    ensureBlockFloor(bits, normalizedSeed, gridSize);
   }
 
-  ensureBlockFloor(bits, normalizedSeed, gridSize);
+  const indices = Array.from({ length: voxelCount }, (_, index) => index);
+  const order = seededShuffle(indices, normalizedSeed ^ 0x51ed270b);
+  const orderRank = new Uint16Array(voxelCount);
+  order.forEach((index, rank) => {
+    orderRank[index] = rank;
+  });
 
   for (const anchor of anchors) {
     if (isInBounds(anchor.coord, gridSize)) {
@@ -203,12 +221,25 @@ export function createMatrixFromSeed(
     bits[index] = 1;
   }
 
-  const indices = Array.from({ length: voxelCount }, (_, index) => index);
-  const order = seededShuffle(indices, normalizedSeed ^ 0x51ed270b);
-  const orderRank = new Uint16Array(voxelCount);
-  order.forEach((index, rank) => {
-    orderRank[index] = rank;
-  });
+  if (fillInput?.mode === "data") {
+    const target = Math.min(
+      voxelCount,
+      Math.max(1, Math.round(fillInput.count ?? 1)),
+    );
+    let active = 0;
+    for (let i = 0; i < bits.length; i += 1) {
+      active += bits[i];
+    }
+    for (const index of order) {
+      if (active >= target) {
+        break;
+      }
+      if (!bits[index]) {
+        bits[index] = 1;
+        active += 1;
+      }
+    }
+  }
 
   let activeCount = 0;
   for (let i = 0; i < bits.length; i += 1) {
@@ -228,12 +259,39 @@ export function createMatrixFromSeed(
     order,
     orderRank,
     activeCount,
+    ...(fillInput ? { fill: fillInput.mode } : {}),
+    ...(fillInput?.mode === "data" ? { fillCount: activeCount } : {}),
+  };
+}
+
+export function createBlankMatrix(
+  label = "Untitled SCM",
+  gridSizeInput = DEFAULT_GRID_SIZE,
+): SCMMatrix {
+  const gridSize = normalizeGridSize(gridSizeInput);
+  const voxelCount = gridSize ** 3;
+  const order = Array.from({ length: voxelCount }, (_, index) => index);
+  const orderRank = new Uint16Array(voxelCount);
+  return {
+    id: "scm_blank",
+    seed: 0,
+    label,
+    createdAt: new Date(0).toISOString(),
+    gridSize,
+    voxelCount,
+    bits: new Uint8Array(voxelCount),
+    anchors: [],
+    path: [],
+    order,
+    orderRank,
+    activeCount: 0,
   };
 }
 
 export function createNewMatrix(
   label = "Untitled Lattice",
   gridSize = DEFAULT_GRID_SIZE,
+  fill?: MatrixFill,
 ): SCMMatrix {
   const seed = randomSeed();
   return createMatrixFromSeed(
@@ -245,6 +303,7 @@ export function createNewMatrix(
     },
     undefined,
     gridSize,
+    fill,
   );
 }
 
@@ -266,6 +325,10 @@ export function matrixToPayload(
     createdAt: matrix.createdAt,
     gridSize: matrix.gridSize,
     anchors: matrix.anchors.map((anchor) => [...anchor.coord] as Vec3),
+    ...(matrix.fill ? { fill: matrix.fill } : {}),
+    ...(matrix.fill === "data" && matrix.fillCount !== undefined
+      ? { fillCount: matrix.fillCount }
+      : {}),
     ...(payload ? { payload } : {}),
     ...(extra?.shapeId ? { shapeId: extra.shapeId } : {}),
     ...(extra?.salt ? { salt: extra.salt } : {}),
@@ -284,6 +347,9 @@ export function matrixFromPayload(payload: SCMTokenPayload): SCMMatrix {
     },
     payload.anchors,
     payload.gridSize ?? DEFAULT_GRID_SIZE,
+    payload.fill
+      ? { mode: payload.fill, count: payload.fillCount }
+      : undefined,
   );
 }
 
