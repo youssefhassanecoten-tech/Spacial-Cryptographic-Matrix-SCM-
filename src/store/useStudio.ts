@@ -437,8 +437,8 @@ export const useStudio = create<StudioState>((set, get) => ({
       if (total + draft.size > MAX_TOTAL_PAYLOAD_BYTES) {
         get().notify(
           `Payload would exceed ${Math.round(
-            MAX_TOTAL_PAYLOAD_BYTES / (1024 * 1024),
-          )} MB. File ${draft.path} was not added.`,
+            MAX_TOTAL_PAYLOAD_BYTES / (1024 * 1024 * 1024),
+          )} GB. File ${draft.path} was not added.`,
           "error",
         );
         break;
@@ -463,11 +463,15 @@ export const useStudio = create<StudioState>((set, get) => ({
     }
     const bytes = new TextEncoder().encode(text);
     set((state) => ({
-      drafts: state.drafts.map((draft) =>
-        draft.id === id
-          ? { ...draft, bytes, size: bytes.byteLength }
-          : draft,
-      ),
+      drafts: state.drafts.map((draft) => {
+        if (draft.id !== id) {
+          return draft;
+        }
+        if (draft.bytes.byteLength === 0 && draft.blob && draft.size > 0) {
+          return draft;
+        }
+        return { ...draft, bytes, size: bytes.byteLength, blob: undefined };
+      }),
     }));
   },
 

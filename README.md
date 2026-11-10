@@ -11,7 +11,7 @@ SCM Studio is the local-first renderer, studio, encrypted payload vault, verific
 ## How the sealed workflow works
 
 1. **Compose** any combination of text items, images, video, folders, PDFs, and documents.
-2. **Choose the lattice scale** or let Auto grow it from 9³ up to 21³ based on payload size. 3³ and 6³ are manual mini modes.
+2. **Choose the lattice scale** or let Auto grow it from 3³ up to 33³ based on payload size. 3³ and 6³ are manual mini modes.
 3. **Seal** the vault. The content root and a fresh salt derive a new matrix seed, matrix ID, shape, and token. The cube visibly reshapes.
 4. **Content disappears** from the studio. Only the encrypted private ID token and the encrypted `.scm` package remain.
 5. **Decrypt** by opening the Decrypt tab and pasting the private ID token. File items also need the matching `.scm` package. A solved-matrix explosion reveals the content.
@@ -21,22 +21,22 @@ Offline encryption cannot revoke an old token. A re-seal archives the previous v
 
 ## Scalable lattice and face codes
 
-Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³**.
+Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³, 24³, 27³, 30³, 33³**.
 
-- **Auto** keeps 9³ for small payloads and grows to 12³, 15³, 18³, then 21³ as the package grows toward 64 MB.
+- **Auto** grows through the tiers as payload size approaches each lattice capacity, up to 33³ and an 8 GB package.
 - **3³ and 6³** are manual mini modes.
-- **Face codes:** auto mode puts a maze micro-code on every active cube below 9³, and separate hidden-anchor points at 9³ and above. The Design tab can force all faces or turn them off.
+- **Face codes:** auto mode places glyphs on every exposed shape face at every lattice size. The Design tab can force all six faces of every active cube or turn glyphs off.
 - Each marker is a content-derived maze shard rendered on one cube face. Full content remains in the private token and `.scm` package; the face layer is a distributed visual data surface, not a replacement for the package.
 
 ## Live shape, fill, and reveal
 
 - The preview matrix reshapes live as payload items are added, edited, or removed.
-- **Auto** tiers use lattice capacity: voxels × six faces × face-shard capacity, reaching the 64 MB payload cap at 21A3.
+- **Auto** tiers use lattice capacity: voxels × six faces × face-shard capacity, reaching the 8 GB payload cap at 33³.
 - **Full size** fills every voxel; **Data count** fills one voxel per payload byte.
 - Shape picker uses flat-faced solids: cube, pyramid, cross, shell, diamond, octahedron, icosahedron, dodecahedron, hex prism, ziggurat, obelisk, star, and crystal. Curved legacy masks remain readable but are hidden from the picker.
 - Face glyphs rotate through QR, constellation, circuit, and rune families.
 - Reveal explosions: radial, vortex, shatter, cascade, prism, and implode. The token carries a versioned `reveal: { v, type }` directive and falls back to radial for unknown types.
-- `.scm` package archives are gzip-compressed before AES-GCM encryption when that reduces size; the package header records the codec for transparent restore.
+- `.scm` packages are gzip-compressed per file and encrypted in authenticated 4 MB chunks, so large uploads do not need to fit in memory all at once. The header records the chunk table and codec.
 
 ## QR and guest mode
 
@@ -48,7 +48,7 @@ Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³**.
 ## Features
 
 ### Cryptographic core
-- Deterministic 3³–21³ matrix built from a seeded PRNG
+- Deterministic 3³–33³ matrix built from a seeded PRNG
 - Three hidden alignment anchors and a carved Manhattan path
 - Content-derived matrix seed: any add, remove, rename, or edit reshapes the matrix and changes the token
 - Public shape tokens (`SCMS1`) and AES-GCM private tokens (`SCM1`)
@@ -83,11 +83,11 @@ Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³**.
 
 ## Payload and lattice limits
 
-- Maximum total payload: 64 MB per SCM
+- Maximum total payload: 8 GB per SCM
 - Text item that can embed in the token: 2 KB
 - Total embedded text per token: 4 KB
 - Larger text and all files go into the encrypted `.scm` package
-- Lattice limit: 21³ = 9,261 voxels. This is deliberately the practical upper bound for smooth rendering on phones; 21³ is supported, but 3³–12³ will be lighter.
+- Lattice limit: 33³ = 35,937 voxels. Capacity supports large packages, but rendering and face-glyph cost scale cubically; 3³–21³ remain the practical editing range on phones.
 
 ## Development
 
@@ -115,7 +115,7 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Outputs: `release-electron/SCM-Studio-Setup-1.4.1.exe`, `release-electron/SCM-Studio-Portable-1.4.1.exe`, `latest.yml`, and the blockmap.
+Outputs: `release-electron/SCM-Studio-Setup-1.5.0.exe`, `release-electron/SCM-Studio-Portable-1.5.0.exe`, `latest.yml`, and the blockmap.
 
 Local copies live in `release/`. The NSIS installer supports automatic minor updates through `electron-updater`. The portable executable is unsigned, so Windows SmartScreen may warn on first launch, and portable builds do not self-update. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 

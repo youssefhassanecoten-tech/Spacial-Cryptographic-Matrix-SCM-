@@ -79,7 +79,7 @@ function DraftRow({
         <Badge tone={embedded ? "emerald" : "amber"}>
           {embedded ? "token" : "package"}
         </Badge>
-        {draft.kind === "text" ? (
+        {embedded ? (
           <button
             type="button"
             onClick={() => {
@@ -133,7 +133,8 @@ function DraftRow({
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export function PayloadPanel() {
@@ -465,7 +466,7 @@ export function PayloadPanel() {
       <PanelSection
         icon={<Package className="h-3.5 w-3.5" />}
         title="Matrix Scale"
-        hint="Auto grows when payload exceeds the lattice capacity: voxels × six faces × ~1.2 KB face shards, up to 64 MB at 21³. Full fills every voxel; data count fills one voxel per payload byte."
+        hint="Auto grows when payload exceeds lattice capacity: voxels × six faces × ~39 KB face-shard budget, up to 8 GB at 33³. Packages are streamed in 4 MB chunks and compressed before encryption."
         action={<Badge tone="cyan">seal at {effectiveSize}³</Badge>}
       >
         <Segmented

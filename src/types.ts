@@ -1,12 +1,12 @@
 export const DEFAULT_GRID_SIZE = 9;
 export const MIN_GRID_SIZE = 3;
-export const MAX_GRID_SIZE = 21;
-export const GRID_SIZE_OPTIONS = [3, 6, 9, 12, 15, 18, 21] as const;
+export const MAX_GRID_SIZE = 33;
+export const GRID_SIZE_OPTIONS = [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33] as const;
 export const GRID_SIZE = DEFAULT_GRID_SIZE;
 export const BLOCK_SIZE = 3;
 export const VOXEL_COUNT = DEFAULT_GRID_SIZE ** 3;
 export const GRID_HALF = (DEFAULT_GRID_SIZE - 1) / 2;
-export const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+export const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024 * 1024;
 
 export type ExplosionType =
   | "radial"
@@ -31,7 +31,11 @@ export type GridSizeOption =
   | "12"
   | "15"
   | "18"
-  | "21";
+  | "21"
+  | "24"
+  | "27"
+  | "30"
+  | "33";
 
 export interface SCMAnchor {
   id: number;

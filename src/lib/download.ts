@@ -42,8 +42,56 @@ async function writeNativeFile(
 }
 
 async function saveNativeBlob(blob: Blob, filename: string): Promise<void> {
-  const base64 = bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
-  await writeNativeFile(filename, base64, blob.type || "application/octet-stream");
+  const { Filesystem, Directory } = await import("@capacitor/filesystem");
+  const { Share } = await import("@capacitor/share");
+  await Filesystem.deleteFile({
+    path: filename,
+    directory: Directory.Cache,
+  }).catch(() => undefined);
+
+  const chunkSize = 8 * 1024 * 1024;
+  let offset = 0;
+  let first = true;
+  while (offset < blob.size) {
+    const chunk = blob.slice(offset, offset + chunkSize);
+    const base64 = bytesToBase64(
+      new Uint8Array(await chunk.arrayBuffer()),
+    );
+    if (first) {
+      await Filesystem.writeFile({
+        path: filename,
+        data: base64,
+        directory: Directory.Cache,
+        recursive: true,
+      });
+      first = false;
+    } else {
+      await Filesystem.appendFile({
+        path: filename,
+        data: base64,
+        directory: Directory.Cache,
+      });
+    }
+    offset += chunkSize;
+  }
+  if (blob.size === 0) {
+    await Filesystem.writeFile({
+      path: filename,
+      data: "",
+      directory: Directory.Cache,
+      recursive: true,
+    });
+  }
+  const uri = await Filesystem.getUri({
+    path: filename,
+    directory: Directory.Cache,
+  });
+  await Share.share({
+    title: filename,
+    text: `${filename} - ${blob.type || "application/octet-stream"}`,
+    url: uri.uri,
+    dialogTitle: "Save or share SCM export",
+  });
 }
 
 export async function downloadBlob(blob: Blob, filename: string): Promise<void> {

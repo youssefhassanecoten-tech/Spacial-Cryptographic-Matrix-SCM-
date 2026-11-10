@@ -18,6 +18,13 @@ import { downloadBlob, downloadText, safeFilename } from "../../lib/download";
 import { buildGuestLink } from "../../lib/vault";
 import { useStudio } from "../../store/useStudio";
 import { Badge, Button, PanelSection, StatRow } from "../ui";
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
 import { useUpdates } from "../../store/useUpdates";
 
 export function TokenPanel() {
@@ -82,7 +89,7 @@ export function TokenPanel() {
             label="payload"
             value={
               sealedStats
-                ? `${sealedStats.count} items · ${(sealedStats.totalSize / 1024).toFixed(1)} KB`
+                ? `${sealedStats.count} items · ${formatBytes(sealedStats.totalSize)}`
                 : "draft / empty"
             }
             tone={sealedStats ? "emerald" : "slate"}

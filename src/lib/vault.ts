@@ -19,6 +19,7 @@ import {
   getAppBaseUrl,
   sha256Hex,
 } from "./crypto";
+import { sha256 } from "@noble/hashes/sha256";
 import {
   createMatrixFromSeed,
   deriveAnchors,
@@ -43,7 +44,36 @@ export interface PayloadDraftItem {
   path: string;
   mime: string;
   size: number;
-  bytes: Uint8Array;
+  bytes: Uint8Array<ArrayBuffer>;
+  blob?: Blob;
+}
+
+export function draftBlob(draft: PayloadDraftItem): Blob {
+  return draft.blob ?? new Blob([draft.bytes]);
+}
+
+export async function sha256Blob(blob: Blob): Promise<string> {
+  const hasher = sha256.create();
+  const reader = blob.stream().getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value) {
+      hasher.update(value);
+    }
+  }
+  return Array.from(hasher.digest(), (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+async function sha256Draft(draft: PayloadDraftItem): Promise<string> {
+  if (draft.blob) {
+    return sha256Blob(draft.blob);
+  }
+  return sha256Hex(draft.bytes);
 }
 
 export interface BuildManifestResult {
@@ -70,7 +100,7 @@ export interface UnlockVaultResult {
   manifest?: SCMPayloadManifest;
   shape?: SCMShapePayload;
   items?: RevealedItem[];
-  files?: Map<string, Uint8Array>;
+  files?: Map<string, Blob>;
   packageLoaded?: boolean;
 }
 
@@ -95,20 +125,47 @@ interface PackageHeader {
   compression?: "gzip";
 }
 
-async function gzipBytes(
-  bytes: Uint8Array<ArrayBuffer>,
-): Promise<Uint8Array<ArrayBuffer> | null> {
-  if (typeof CompressionStream === "undefined") {
-    return null;
-  }
-  try {
-    const stream = new Blob([bytes])
-      .stream()
-      .pipeThrough(new CompressionStream("gzip"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-  } catch {
-    return null;
-  }
+const PACKAGE_V2_MAGIC = "SCMP2";
+const PACKAGE_CHUNK_SIZE = 4 * 1024 * 1024;
+
+interface PackageEntryV2 {
+  id: string;
+  kind: PayloadKind;
+  name: string;
+  path: string;
+  mime: string;
+  size: number;
+  sha256: string;
+}
+
+interface PackageHeaderV2 {
+  v: 2;
+  tokenId: string;
+  shapeId: string;
+  contentRoot: string;
+  manifestIv: string;
+  manifestSize: number;
+  chunkSize: number;
+  chunks: number[];
+  compression: "gzip" | "none";
+}
+
+function uint32Bytes(value: number): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, value, true);
+  return bytes;
+}
+
+async function readBlobSlice(blob: Blob, start: number, end: number): Promise<Uint8Array<ArrayBuffer>> {
+  return new Uint8Array(await blob.slice(start, end).arrayBuffer());
+}
+
+async function blobFromReadableStream(
+  stream: ReadableStream<Uint8Array>,
+  type: string,
+): Promise<Blob> {
+  const blob = await new Response(stream).blob();
+  return new Blob([blob], { type });
 }
 
 async function gunzipBytes(
@@ -126,10 +183,6 @@ async function gunzipBytes(
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  return new Uint8Array(bytes);
-}
-
 function randomSalt(): string {
   return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
 }
@@ -146,17 +199,22 @@ export function detectKindFromFile(file: File): PayloadKind {
 }
 
 export async function draftFromFile(file: File): Promise<PayloadDraftItem> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const kind = detectKindFromFile(file);
   const relativePath =
     (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+  const bytes =
+    kind === "text" && file.size <= MAX_EMBEDDED_ITEM_BYTES
+      ? new Uint8Array(await file.arrayBuffer())
+      : new Uint8Array(0);
   return {
     id: randomId("item"),
-    kind: detectKindFromFile(file),
+    kind,
     name: file.name,
     path: relativePath,
     mime: file.type || "application/octet-stream",
-    size: bytes.byteLength,
+    size: file.size,
     bytes,
+    blob: file,
   };
 }
 
@@ -200,7 +258,10 @@ export async function buildManifest(
   const totalSize = drafts.reduce((sum, draft) => sum + draft.size, 0);
   if (totalSize > MAX_TOTAL_PAYLOAD_BYTES) {
     throw new Error(
-      `Payload totals ${(totalSize / (1024 * 1024)).toFixed(1)} MB, above the 64 MB limit.`,
+      `Payload totals ${(totalSize / (1024 * 1024 * 1024)).toFixed(2)} GB, above the ${(
+        MAX_TOTAL_PAYLOAD_BYTES /
+        (1024 * 1024 * 1024)
+      ).toFixed(0)} GB limit.`,
     );
   }
   const sorted = drafts
@@ -212,7 +273,7 @@ export async function buildManifest(
   const packageDrafts: PayloadDraftItem[] = [];
 
   for (const draft of sorted) {
-    const sha256 = await sha256Hex(draft.bytes);
+    const sha256 = await sha256Draft(draft);
     const canEmbed =
       draft.kind === "text" &&
       draft.size <= MAX_EMBEDDED_ITEM_BYTES &&
@@ -522,8 +583,58 @@ async function deriveContentKey(
   ]);
 }
 
+async function* readChunks(
+  stream: ReadableStream<Uint8Array>,
+  size: number,
+): AsyncGenerator<Uint8Array<ArrayBuffer>> {
+  const reader = stream.getReader();
+  const pending = new Uint8Array(size);
+  let pendingLength = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (value) {
+        let offset = 0;
+        while (offset < value.length) {
+          const take = Math.min(size - pendingLength, value.length - offset);
+          pending.set(value.subarray(offset, offset + take), pendingLength);
+          pendingLength += take;
+          offset += take;
+          if (pendingLength === size) {
+            yield pending.slice(0, size);
+            pendingLength = 0;
+          }
+        }
+      }
+      if (done) {
+        if (pendingLength > 0) {
+          yield pending.slice(0, pendingLength);
+        }
+        break;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function encryptChunk(
+  key: CryptoKey,
+  plain: Uint8Array<ArrayBuffer>,
+  additionalData: Uint8Array<ArrayBuffer>,
+): Promise<{ iv: Uint8Array<ArrayBuffer>; cipher: Uint8Array<ArrayBuffer> }> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData },
+    key,
+    plain,
+  );
+  return { iv, cipher: new Uint8Array(cipher) };
+}
+
 export async function buildPackage(
   drafts: PayloadDraftItem[],
+  manifestItems: SCMPayloadItem[],
   tokenId: string,
   shapeId: string,
   salt: string,
@@ -532,75 +643,97 @@ export async function buildPackage(
   const sorted = drafts
     .slice()
     .sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id));
-  const entries: ArchiveEntry[] = [];
-  let offset = 0;
-  for (const draft of sorted) {
-    entries.push({
-      id: draft.id,
-      kind: draft.kind,
-      name: draft.name,
-      path: draft.path,
-      mime: draft.mime,
-      size: draft.size,
-      sha256: await sha256Hex(draft.bytes),
-      offset,
-    });
-    offset += draft.size;
-  }
-  const archiveHeader = textEncoder.encode(JSON.stringify(entries));
-  const archive = new Uint8Array(4 + archiveHeader.length + offset);
-  new DataView(archive.buffer).setUint32(0, archiveHeader.length, true);
-  archive.set(archiveHeader, 4);
-  let cursor = 4 + archiveHeader.length;
-  for (const draft of sorted) {
-    archive.set(draft.bytes, cursor);
-    cursor += draft.size;
-  }
-  const compressed = await gzipBytes(archive);
-  const stored =
-    compressed && compressed.byteLength < archive.byteLength
-      ? compressed
-      : archive;
-  const compression =
-    compressed && compressed.byteLength < archive.byteLength
-      ? "gzip"
-      : undefined;
-  const key = await deriveContentKey(salt, contentRoot);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const cipher = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    stored,
+  const itemById = new Map(
+    manifestItems
+      .filter((item) => item.mode === "package")
+      .map((item) => [item.id, item]),
   );
-  const header: PackageHeader = {
-    v: 1,
+  const entries: PackageEntryV2[] = sorted.map((draft) => {
+    const item = itemById.get(draft.id);
+    if (!item) {
+      throw new Error(`Package manifest is missing ${draft.path}.`);
+    }
+    return {
+      id: item.id,
+      kind: item.kind,
+      name: item.name,
+      path: item.path,
+      mime: item.mime,
+      size: item.size,
+      sha256: item.sha256,
+    };
+  });
+
+  const key = await deriveContentKey(salt, contentRoot);
+  const compression =
+    typeof CompressionStream === "undefined" ? "none" : "gzip";
+  const chunkParts: BlobPart[] = [];
+  const chunks: number[] = [];
+
+  for (const draft of sorted) {
+    let source: ReadableStream<Uint8Array> = draftBlob(draft).stream();
+    if (compression === "gzip") {
+      source = source.pipeThrough(
+        new CompressionStream(
+          "gzip",
+        ) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>,
+      );
+    }
+    let chunkIndex = 0;
+    for await (const plain of readChunks(source, PACKAGE_CHUNK_SIZE)) {
+      const aad = textEncoder.encode(
+        `${PACKAGE_V2_MAGIC}:${tokenId}:${draft.id}:${chunkIndex}`,
+      );
+      const { iv, cipher } = await encryptChunk(key, plain, aad);
+      const part = new Uint8Array(4 + 12 + cipher.byteLength);
+      new DataView(part.buffer).setUint32(0, cipher.byteLength, true);
+      part.set(iv, 4);
+      part.set(cipher, 16);
+      chunkParts.push(new Blob([part]));
+      chunkIndex += 1;
+    }
+    chunks.push(chunkIndex);
+  }
+
+  const manifestBytes = textEncoder.encode(JSON.stringify(entries));
+  const manifestIv = crypto.getRandomValues(new Uint8Array(12));
+  const manifestAad = textEncoder.encode(
+    `${PACKAGE_V2_MAGIC}:manifest:${tokenId}`,
+  );
+  const manifestCipher = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: manifestIv, additionalData: manifestAad },
+      key,
+      manifestBytes,
+    ),
+  );
+  const header: PackageHeaderV2 = {
+    v: 2,
     tokenId,
     shapeId,
     contentRoot,
-    iv: bytesToBase64Url(iv),
-    archiveSize: archive.byteLength,
-    ...(compression ? { compression } : {}),
+    manifestIv: bytesToBase64Url(manifestIv),
+    manifestSize: manifestCipher.byteLength,
+    chunkSize: PACKAGE_CHUNK_SIZE,
+    chunks,
+    compression,
   };
   const headerBytes = textEncoder.encode(JSON.stringify(header));
-  const magic = textEncoder.encode(PACKAGE_MAGIC);
-  const output = new Uint8Array(
-    9 + headerBytes.length + new Uint8Array(cipher).length,
+  const magic = textEncoder.encode(PACKAGE_V2_MAGIC);
+  return new Blob(
+    [magic, uint32Bytes(headerBytes.length), headerBytes, manifestCipher, ...chunkParts],
+    { type: "application/x-scm-package" },
   );
-  output.set(magic, 0);
-  new DataView(output.buffer).setUint32(5, headerBytes.length, true);
-  output.set(headerBytes, 9);
-  output.set(new Uint8Array(cipher), 9 + headerBytes.length);
-  return new Blob([output], { type: "application/x-scm-package" });
 }
 
-export async function parsePackage(
-  input: Blob | ArrayBuffer,
+async function parsePackageV1(
+  blob: Blob,
   salt: string,
   contentRoot: string,
   tokenId: string,
   shapeId: string,
-): Promise<Map<string, Uint8Array<ArrayBuffer>>> {
-  const buffer = input instanceof Blob ? await input.arrayBuffer() : input;
+): Promise<Map<string, Blob>> {
+  const buffer = await blob.arrayBuffer();
   const raw = new Uint8Array(buffer);
   if (raw.length < 9 || textDecoder.decode(raw.subarray(0, 5)) !== PACKAGE_MAGIC) {
     throw new Error("This is not an SCMP1 encrypted package.");
@@ -657,16 +790,199 @@ export async function parsePackage(
   } catch {
     throw new Error("SCM package archive manifest is invalid.");
   }
-  const files = new Map<string, Uint8Array<ArrayBuffer>>();
+  const files = new Map<string, Blob>();
   for (const entry of entries) {
     const start = 4 + manifestLength + entry.offset;
     const end = start + entry.size;
     if (end > archive.length) {
       throw new Error(`Package entry ${entry.name} is truncated.`);
     }
-    files.set(entry.id, archive.slice(start, end));
+    const bytes = archive.slice(start, end);
+    if (bytes.byteLength !== entry.size) {
+      throw new Error(`Size mismatch for ${entry.name}.`);
+    }
+    const hash = await sha256Hex(bytes);
+    if (hash !== entry.sha256) {
+      throw new Error(`Integrity check failed for ${entry.name}.`);
+    }
+    files.set(entry.id, new Blob([bytes], { type: entry.mime }));
   }
   return files;
+}
+
+async function parsePackageV2(
+  blob: Blob,
+  salt: string,
+  contentRoot: string,
+  tokenId: string,
+  shapeId: string,
+): Promise<Map<string, Blob>> {
+  if (blob.size < 9) {
+    throw new Error("SCM package is truncated.");
+  }
+  const headerLengthBytes = await readBlobSlice(blob, 5, 9);
+  const headerLength = new DataView(headerLengthBytes.buffer).getUint32(0, true);
+  if (headerLength <= 0 || 9 + headerLength > blob.size) {
+    throw new Error("SCM package header is corrupt.");
+  }
+  let header: PackageHeaderV2;
+  try {
+    header = JSON.parse(
+      textDecoder.decode(await readBlobSlice(blob, 9, 9 + headerLength)),
+    ) as PackageHeaderV2;
+  } catch {
+    throw new Error("SCM package header is invalid.");
+  }
+  if (
+    header.v !== 2 ||
+    header.tokenId !== tokenId ||
+    header.shapeId !== shapeId ||
+    header.contentRoot !== contentRoot ||
+    (header.compression !== "gzip" && header.compression !== "none") ||
+    !Array.isArray(header.chunks)
+  ) {
+    throw new Error("SCM package does not belong to this token.");
+  }
+
+  const key = await deriveContentKey(salt, contentRoot);
+  const manifestStart = 9 + headerLength;
+  const manifestCipher = await readBlobSlice(
+    blob,
+    manifestStart,
+    manifestStart + header.manifestSize,
+  );
+  if (manifestCipher.byteLength !== header.manifestSize) {
+    throw new Error("SCM package manifest is truncated.");
+  }
+  let entries: PackageEntryV2[];
+  try {
+    const manifestAad = textEncoder.encode(
+      `${PACKAGE_V2_MAGIC}:manifest:${tokenId}`,
+    );
+    const manifestBytes = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: base64UrlToBytes(header.manifestIv),
+        additionalData: manifestAad,
+      },
+      key,
+      manifestCipher,
+    );
+    entries = JSON.parse(
+      textDecoder.decode(new Uint8Array(manifestBytes)),
+    ) as PackageEntryV2[];
+  } catch {
+    throw new Error("SCM package manifest authentication failed.");
+  }
+  if (entries.length !== header.chunks.length) {
+    throw new Error("SCM package chunk table is corrupt.");
+  }
+
+  const files = new Map<string, Blob>();
+  let cursor = manifestStart + header.manifestSize;
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+    const entry = entries[entryIndex];
+    const chunkCount = header.chunks[entryIndex];
+    if (!Number.isInteger(chunkCount) || chunkCount < 0) {
+      throw new Error("SCM package chunk table is corrupt.");
+    }
+    if (chunkCount === 0) {
+      const empty = new Blob([], { type: entry.mime });
+      if (empty.size !== entry.size || entries[entryIndex].size !== 0) {
+        throw new Error(`Size mismatch for ${entry.name}.`);
+      }
+      files.set(entry.id, empty);
+      continue;
+    }
+
+    let chunkIndex = 0;
+    let chunkCursor = cursor;
+    const compressedStream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (chunkIndex >= chunkCount) {
+          controller.close();
+          return;
+        }
+        try {
+          const lengthBytes = await readBlobSlice(
+            blob,
+            chunkCursor,
+            chunkCursor + 4,
+          );
+          const cipherLength = new DataView(lengthBytes.buffer).getUint32(
+            0,
+            true,
+          );
+          if (
+            cipherLength < 16 ||
+            cipherLength > header.chunkSize + 64
+          ) {
+            throw new Error("SCM package chunk is corrupt.");
+          }
+          const iv = await readBlobSlice(blob, chunkCursor + 4, chunkCursor + 16);
+          const cipher = await readBlobSlice(
+            blob,
+            chunkCursor + 16,
+            chunkCursor + 16 + cipherLength,
+          );
+          if (cipher.byteLength !== cipherLength) {
+            throw new Error("SCM package chunk is truncated.");
+          }
+          chunkCursor += 16 + cipherLength;
+          const aad = textEncoder.encode(
+            `${PACKAGE_V2_MAGIC}:${tokenId}:${entry.id}:${chunkIndex}`,
+          );
+          const plain = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv, additionalData: aad },
+            key,
+            cipher,
+          );
+          chunkIndex += 1;
+          controller.enqueue(new Uint8Array(plain));
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+    });
+
+    const fileStream =
+      header.compression === "gzip"
+        ? compressedStream.pipeThrough(
+            new DecompressionStream(
+              "gzip",
+            ) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>,
+          )
+        : compressedStream;
+    const fileBlob = await blobFromReadableStream(fileStream, entry.mime);
+    cursor = chunkCursor;
+    if (fileBlob.size !== entry.size) {
+      throw new Error(`Size mismatch for ${entry.name}.`);
+    }
+    const hash = await sha256Blob(fileBlob);
+    if (hash !== entry.sha256) {
+      throw new Error(`Integrity check failed for ${entry.name}.`);
+    }
+    files.set(entry.id, fileBlob);
+  }
+  return files;
+}
+
+export async function parsePackage(
+  input: Blob | ArrayBuffer,
+  salt: string,
+  contentRoot: string,
+  tokenId: string,
+  shapeId: string,
+): Promise<Map<string, Blob>> {
+  const blob = input instanceof Blob ? input : new Blob([input]);
+  const magic = textDecoder.decode(await readBlobSlice(blob, 0, 5));
+  if (magic === PACKAGE_V2_MAGIC) {
+    return parsePackageV2(blob, salt, contentRoot, tokenId, shapeId);
+  }
+  if (magic === PACKAGE_MAGIC) {
+    return parsePackageV1(blob, salt, contentRoot, tokenId, shapeId);
+  }
+  throw new Error("This is not an SCM package.");
 }
 
 export async function sealVault(
@@ -713,6 +1029,7 @@ export async function sealVault(
     packageDrafts.length > 0
       ? await buildPackage(
           packageDrafts,
+          manifest.items,
           matrix.id,
           shape.shapeId,
           salt,
@@ -803,7 +1120,7 @@ export async function unlockVault(options: {
         error: `This SCM contains ${packageItems.length} encrypted file item(s). Load the matching .scm package to reveal them.`,
       };
     }
-    let files: Map<string, Uint8Array<ArrayBuffer>> | undefined;
+    let files: Map<string, Blob> | undefined;
     if (packageSource) {
       if (!payload.salt || !payload.contentRoot) {
         return { ok: false, error: "This token predates the package format." };
@@ -818,30 +1135,27 @@ export async function unlockVault(options: {
     }
     const items: RevealedItem[] = [];
     for (const item of manifest.items) {
-      let bytes: Uint8Array;
+      let blob: Blob;
       if (item.mode === "embedded") {
         if (!item.data) {
           return { ok: false, error: `Embedded item ${item.name} is missing data.` };
         }
-        bytes = base64UrlToBytes(item.data);
+        blob = new Blob([base64UrlToBytes(item.data)], { type: item.mime });
       } else {
-        const fileBytes = files?.get(item.id);
-        if (!fileBytes) {
+        const fileBlob = files?.get(item.id);
+        if (!fileBlob) {
           return { ok: false, error: `Package item ${item.name} is missing.` };
         }
-        bytes = fileBytes;
+        blob = fileBlob;
       }
-      if (bytes.byteLength !== item.size) {
+      if (blob.size !== item.size) {
         return { ok: false, error: `Size mismatch for ${item.name}.` };
       }
-      const hash = await sha256Hex(bytes);
+      const hash = await sha256Blob(blob);
       if (hash !== item.sha256) {
         return { ok: false, error: `Integrity check failed for ${item.name}.` };
       }
-      items.push({
-        ...item,
-        blob: new Blob([copyBytes(bytes)], { type: item.mime }),
-      });
+      items.push({ ...item, blob });
     }
     return {
       ok: true,
@@ -862,17 +1176,24 @@ export async function unlockVault(options: {
 
 export function draftsFromUnlocked(
   manifest: SCMPayloadManifest,
-  files?: Map<string, Uint8Array>,
+  files?: Map<string, Blob>,
 ): PayloadDraftItem[] {
   const drafts: PayloadDraftItem[] = [];
   for (const item of manifest.items) {
-    let bytes: Uint8Array | undefined;
     if (item.mode === "embedded" && item.data) {
-      bytes = base64UrlToBytes(item.data);
-    } else if (files) {
-      bytes = files.get(item.id);
+      drafts.push({
+        id: item.id,
+        kind: item.kind,
+        name: item.name,
+        path: item.path,
+        mime: item.mime,
+        size: item.size,
+        bytes: base64UrlToBytes(item.data),
+      });
+      continue;
     }
-    if (!bytes) {
+    const blob = files?.get(item.id);
+    if (!blob) {
       continue;
     }
     drafts.push({
@@ -882,7 +1203,8 @@ export function draftsFromUnlocked(
       path: item.path,
       mime: item.mime,
       size: item.size,
-      bytes,
+      bytes: new Uint8Array(0),
+      blob,
     });
   }
   return drafts;

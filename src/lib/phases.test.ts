@@ -365,7 +365,7 @@ describe("Phase 6 sealed multi-item vault", () => {
 
 describe("Phase 7 scalable lattice", () => {
   it("supports 3� through 21� matrices", () => {
-    for (const gridSize of [3, 6, 9, 12, 15, 18, 21]) {
+    for (const gridSize of [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33]) {
       const scaled = createMatrixFromSeed(SEED, META, undefined, gridSize);
       expect(scaled.gridSize).toBe(gridSize);
       expect(scaled.voxelCount).toBe(gridSize ** 3);
@@ -386,24 +386,24 @@ describe("Phase 7 scalable lattice", () => {
           path: "large.txt",
           mime: "text/plain",
           size: 9,
-          bytes: new TextEncoder().encode("scaled 21"),
+          bytes: new TextEncoder().encode("scaled 33"),
         },
       ],
-      "Scaled 21",
-      21,
+      "Scaled 33",
+      33,
     );
-    expect(artifacts.matrix.gridSize).toBe(21);
-    expect(artifacts.matrix.voxelCount).toBe(21 ** 3);
+    expect(artifacts.matrix.gridSize).toBe(33);
+    expect(artifacts.matrix.voxelCount).toBe(33 ** 3);
     const unlocked = await unlockVault({
       token: artifacts.token,
       expectedShape: artifacts.shape,
     });
     expect(unlocked.ok).toBe(true);
     const text = unlocked.items?.find((item) => item.kind === "text");
-    expect(await text?.blob?.text()).toBe("scaled 21");
+    expect(await text?.blob?.text()).toBe("scaled 33");
     const faces = buildAllFaceMaps(artifacts.matrix, DEFAULT_DESIGN);
-    expect(faces[0].gridSize).toBe(21);
-    expect(faces[0].cells).toHaveLength(21 ** 2);
+    expect(faces[0].gridSize).toBe(33);
+    expect(faces[0].cells).toHaveLength(33 ** 2);
     expect(faceMapSvg(faces[0])).toContain("MATRIX");
   });
 });
@@ -480,6 +480,7 @@ describe("Phase 9 capacity and reveal directives", () => {
     expect(autoGridSizeForBytes(medium)).toBe(6);
     expect(autoGridSizeForBytes(medium + 1)).toBe(9);
     expect(autoGridSizeForBytes(capacityForGridSize(21))).toBe(21);
+    expect(autoGridSizeForBytes(capacityForGridSize(33))).toBe(33);
   });
 
   it("carries a versioned reveal type through the shape and private token", async () => {
@@ -579,5 +580,50 @@ describe("Phase 11 package compression", () => {
     const restored = new Uint8Array(await file!.blob!.arrayBuffer());
     expect(restored.length).toBe(20000);
     expect(restored[0]).toBe(65);
+  });
+});
+
+describe("Phase 12 streaming package chunks", () => {
+  it("splits large incompressible files into authenticated chunks", async () => {
+    const size = 4 * 1024 * 1024 + 4096;
+    const bytes = new Uint8Array(size);
+    let state = 0x12345678;
+    for (let i = 0; i < size; i += 1) {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      bytes[i] = state & 0xff;
+    }
+    const draft: PayloadDraftItem = {
+      id: "chunked-doc",
+      kind: "document",
+      name: "chunked.bin",
+      path: "chunked.bin",
+      mime: "application/octet-stream",
+      size,
+      bytes,
+    };
+    const artifacts = await sealVault([draft], "Chunked", 9, "full");
+    expect(artifacts.packageBlob).not.toBeNull();
+    const buffer = await artifacts.packageBlob!.arrayBuffer();
+    const raw = new Uint8Array(buffer);
+    const headerLength = new DataView(buffer).getUint32(5, true);
+    const header = JSON.parse(
+      new TextDecoder().decode(raw.subarray(9, 9 + headerLength)),
+    ) as { v: number; chunks: number[]; compression: string };
+    expect(header.v).toBe(2);
+    expect(header.compression).toBe("gzip");
+    expect(header.chunks[0]).toBeGreaterThan(1);
+
+    const unlocked = await unlockVault({
+      token: artifacts.token,
+      packageInput: artifacts.packageBlob,
+    });
+    expect(unlocked.ok).toBe(true);
+    const file = unlocked.items?.find((item) => item.kind === "document");
+    expect(file?.blob?.size).toBe(size);
+    const restored = new Uint8Array(await file!.blob!.arrayBuffer());
+    expect(restored[0]).toBe(bytes[0]);
+    expect(restored[size - 1]).toBe(bytes[size - 1]);
   });
 });
