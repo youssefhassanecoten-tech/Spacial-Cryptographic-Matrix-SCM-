@@ -19,7 +19,8 @@
     "dist:win": "npm run build:electron && electron-builder --win nsis portable",
     "dist:win:installer": "npm run build:electron && electron-builder --win nsis",
     "dist:mac": "npm run build:electron && electron-builder --mac dmg",
-    "dist:linux": "npm run build:electron && electron-builder --linux AppImage"
+    "dist:linux": "npm run build:electron && electron-builder --linux AppImage",
+    "cipher:test": "node --test scripts/scm-local-cipher.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",

@@ -178,6 +178,18 @@ $env:VITE_PUBLIC_APP_URL="https://youssefhassanecoten-tech.github.io/Spacial-Cry
 npm.cmd run build
 ```
 
+## Experimental local cipher (unaudited)
+
+`scripts/scm-local-cipher.mjs` is a local-only, unaudited 3D Feistel experiment. It is **not** used by the web app, APK, or Windows builds.
+
+```powershell
+$env:SCM_PASSPHRASE="use-a-long-passphrase"
+node scripts/scm-local-cipher.mjs encrypt input.bin output.scmexp
+node scripts/scm-local-cipher.mjs decrypt output.scmexp restored.bin
+```
+
+It uses a keyed 8-bit S-box, a 2×4×4 spatial permutation, a 16-round Feistel network, HKDF round keys, scrypt passphrase derivation, CTR mode, and an HMAC-SHA256 tag. It is intended only to make local files unreadable without the passphrase. Do not use it for valuable secrets until it has independent cryptanalysis.
+
 ## License
 
 SCM Studio is proprietary, source-available software. It is **not** open source.
