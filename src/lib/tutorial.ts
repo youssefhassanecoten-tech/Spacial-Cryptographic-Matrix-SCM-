@@ -130,6 +130,18 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     tab: "decrypt",
   },
   {
+    id: "printability",
+    sinceVersion: "1.8.1",
+    title: "Printability disclaimers",
+    body: "The app now warns when a shape is thin, perforated, or overhanging, when the footprint exceeds a common 220 mm bed, or when the payload is too large for the printable shard net.",
+    bullets: [
+      "Warnings do not block the STL export.",
+      "Shell, star, crystal, icosahedron, and dodecahedron are flagged as harder prints.",
+      "Payloads above ~6 KB can still be sharded digitally but not carried by one printable cube net.",
+    ],
+    tab: "design",
+  },
+  {
     id: "tours",
     sinceVersion: "1.8.0",
     title: "Tours that follow updates",

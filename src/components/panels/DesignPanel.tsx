@@ -29,6 +29,7 @@ import {
   ScanLine,
   ShieldAlert,
   Sparkles,
+  TriangleAlert,
   Waypoints,
   Zap,
 } from "lucide-react";
@@ -40,6 +41,7 @@ import type {
   ShapeType,
 } from "../../types";
 import { PALETTES } from "../../lib/palettes";
+import { shapePrintWarning } from "../../lib/printability";
 import { PATTERN_HINTS, PATTERN_LABELS, PATTERN_TYPES } from "../../lib/patterns";
 import { SHAPE_HINTS, SHAPE_LABELS, SHAPE_TYPES } from "../../lib/shapes";
 import { anchorPhysicalCenters } from "../../lib/scm";
@@ -102,6 +104,7 @@ export function DesignPanel() {
   const matrix = useStudio((state) => state.matrix);
   const setDesign = useStudio((state) => state.setDesign);
   const centers = anchorPhysicalCenters(matrix);
+  const printWarning = shapePrintWarning(design.shape);
 
   return (
     <div className="space-y-3">
@@ -141,6 +144,15 @@ export function DesignPanel() {
           The shape mask is visual-only. Active bits, anchor centers, and execution order
           remain locked.
         </p>
+        {printWarning ? (
+          <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[9px] leading-relaxed text-amber-200">
+            <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>
+              <strong className="font-semibold">Printability warning:</strong>{" "}
+              {printWarning}
+            </span>
+          </div>
+        ) : null}
       </PanelSection>
 
       <PanelSection

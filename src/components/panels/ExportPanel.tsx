@@ -12,10 +12,15 @@ import {
   QrCode,
   ScanText,
   Share2,
+  TriangleAlert,
 } from "lucide-react";
 import type { ExportOptions } from "../../types";
 import type { FaceId } from "../../lib/exporters/vector";
 import { buildGuestLink } from "../../lib/vault";
+import {
+  footprintPrintWarning,
+  shapePrintWarning,
+} from "../../lib/printability";
 import { copyText } from "../../lib/clipboard";
 import {
   downloadBlob,
@@ -97,6 +102,10 @@ export function ExportPanel() {
     [matrix, modelOptions],
   );
   const baseName = safeFilename(matrix.label);
+  const printWarnings = [
+    shapePrintWarning(design.shape),
+    footprintPrintWarning(matrix.gridSize, modelOptions.scale),
+  ].filter((warning): warning is string => Boolean(warning));
 
   useEffect(() => {
     setCardUrl("");
@@ -169,6 +178,19 @@ export function ExportPanel() {
         action={<Badge tone="cyan">{estimate.triangles} tri</Badge>}
       >
         <div className="space-y-2.5">
+          {printWarnings.length > 0 ? (
+            <div className="flex items-start gap-1.5 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[9px] leading-relaxed text-amber-200">
+              <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+              <div>
+                <p className="font-semibold">Printability disclaimer</p>
+                {printWarnings.map((warning) => (
+                  <p key={warning} className="mt-0.5">
+                    {warning}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <Toggle
             compact
             label="Base plate"

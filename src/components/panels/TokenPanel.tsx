@@ -13,6 +13,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Split,
+  TriangleAlert,
 } from "lucide-react";
 import { copyText } from "../../lib/clipboard";
 import { tokenFingerprint } from "../../lib/crypto";
@@ -23,6 +24,7 @@ import {
   splitTokenShares,
 } from "../../lib/sharding";
 import { buildShardCubeNetSvg } from "../../lib/shardSheet";
+import { packagePrintWarning } from "../../lib/printability";
 import { buildGuestLink } from "../../lib/vault";
 import { useStudio } from "../../store/useStudio";
 import { Badge, Button, PanelSection, Segmented, StatRow } from "../ui";
@@ -381,6 +383,12 @@ export function TokenPanel() {
             <QrCode className="h-3 w-3" />
             Printable cube net
           </Button>
+          {packagePrintWarning(packageBlob?.size) ? (
+            <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[9px] leading-relaxed text-amber-200">
+              <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+              {packagePrintWarning(packageBlob?.size)}
+            </p>
+          ) : null}
           <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
             Shard export is limited to 16 MB packages. The printable cube net is for
             small packages because each face carries one QR shard.

@@ -25,6 +25,7 @@ import { GRID_SIZE_OPTIONS } from "../../types";
 import { downloadBlob, safeFilename } from "../../lib/download";
 import type { PayloadDraftItem } from "../../lib/vault";
 import { capacityForGridSize } from "../../lib/scm";
+import { packagePrintWarning } from "../../lib/printability";
 import {
   autoGridSizeForDrafts,
   resolveGridSize,
@@ -191,6 +192,7 @@ export function PayloadPanel() {
     Math.max(1, totalSize),
   );
   const tierCapacity = capacityForGridSize(effectiveSize);
+  const printWarning = packagePrintWarning(totalSize);
   const gridOptions: Array<{ value: GridSizeOption; label: string }> = [
     { value: "auto", label: "Auto" },
     ...GRID_SIZE_OPTIONS.map((size) => ({
@@ -526,13 +528,17 @@ export function PayloadPanel() {
               design.faceCodeMode === "off"
                 ? "off"
                 : design.faceCodeMode === "all"
-                  ? "all active cubes"
-                  : effectiveSize < 9
-                    ? "all active cubes"
-                    : "anchor points"
+                  ? "all active faces"
+                  : "surface faces"
             }
           />
         </div>
+        {printWarning ? (
+          <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[9px] leading-relaxed text-amber-200">
+            <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+            {printWarning}
+          </div>
+        ) : null}
       </PanelSection>
 
       <PanelSection
