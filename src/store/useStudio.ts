@@ -168,9 +168,17 @@ export interface StudioState {
   removeDraft: (id: string) => void;
   updateTextDraft: (id: string, text: string) => void;
   clearDrafts: () => void;
-  sealPayload: (label?: string) => Promise<SealResult>;
-  unlockPayload: (token: string, packageFile?: Blob | null) => Promise<UnlockResult>;
-  unlockForEdit: (token: string, packageFile?: Blob | null) => Promise<UnlockResult>;
+  sealPayload: (label?: string, passphrase?: string) => Promise<SealResult>;
+  unlockPayload: (
+    token: string,
+    packageFile?: Blob | null,
+    passphrase?: string,
+  ) => Promise<UnlockResult>;
+  unlockForEdit: (
+    token: string,
+    packageFile?: Blob | null,
+    passphrase?: string,
+  ) => Promise<UnlockResult>;
   newSCM: (label?: string) => Promise<void>;
   bootstrap: () => Promise<void>;
   closeReveal: () => void;
@@ -477,7 +485,7 @@ export const useStudio = create<StudioState>((set, get) => ({
 
   clearDrafts: () => set({ drafts: [] }),
 
-  sealPayload: async (label) => {
+  sealPayload: async (label, passphrase) => {
     const { drafts, matrix, token, shapeToken, packageBlob } = get();
     if (drafts.length === 0) {
       return { ok: false, error: "Add at least one item before sealing." };
@@ -491,6 +499,7 @@ export const useStudio = create<StudioState>((set, get) => ({
         gridSize,
         get().fillChoice,
         get().revealStyle,
+        passphrase,
       );
       const previous = sealedVersionFrom(token, shapeToken, packageBlob);
       get().timeRef.current = 0;
@@ -539,7 +548,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     }
   },
 
-  unlockPayload: async (token, packageFile) => {
+  unlockPayload: async (token, packageFile, passphrase) => {
     const trimmed = token.trim();
     if (!trimmed) {
       return { ok: false, error: "Paste the private SCM ID token first." };
@@ -556,6 +565,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({ tokenStatus: "syncing", tokenError: null });
     const result = await unlockVault({
       token: trimmed,
+      passphrase,
       expectedShape,
       packageInput: packageFile ?? null,
       storedPackage: get().packageBlob,
@@ -609,7 +619,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     return { ok: true, reveal };
   },
 
-  unlockForEdit: async (token, packageFile) => {
+  unlockForEdit: async (token, packageFile, passphrase) => {
     const trimmed = token.trim();
     if (!trimmed) {
       return { ok: false, error: "Paste the private SCM ID token first." };
@@ -629,6 +639,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     }
     const result = await unlockVault({
       token: trimmed,
+      passphrase,
       packageInput: packageFile ?? null,
       storedPackage: get().packageBlob,
     });
