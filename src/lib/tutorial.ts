@@ -130,6 +130,18 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     tab: "decrypt",
   },
   {
+    id: "shares-split",
+    sinceVersion: "1.9.0",
+    title: "Separate share files",
+    body: "Token shares now download as separate files, one share per file, and each share carries a checksum. Decrypt can import those files directly.",
+    bullets: [
+      "A damaged share fails fast before reconstruction.",
+      "Keep each file on a separate device or location.",
+      "Package shards already downloaded as separate .scmshard files.",
+    ],
+    tab: "token",
+  },
+  {
     id: "printability",
     sinceVersion: "1.8.1",
     title: "Printability disclaimers",

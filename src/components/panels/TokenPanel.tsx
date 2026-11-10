@@ -178,25 +178,19 @@ export function TokenPanel() {
           variant="outline"
           className="mt-2 w-full"
           disabled={!token}
-          onClick={() => {
+          onClick={async () => {
             const [threshold, total] = shareMode.split("-").map(Number);
             try {
               const shares = splitTokenShares(token, threshold, total);
-              const [k, n] = shareMode.split("-");
-              const content = [
-                "SCM TOKEN SHARES",
-                `threshold=${k}`,
-                `total=${n}`,
-                "Keep each share separate. Any fewer than the threshold cannot recover the token.",
-                "",
-                ...shares,
-              ].join("\n");
-              void downloadText(
-                content,
-                `${safeFilename(matrix.label)}.token-shares.txt`,
-              );
+              const base = safeFilename(matrix.label);
+              for (let index = 0; index < shares.length; index += 1) {
+                await downloadText(
+                  `${shares[index]}\n`,
+                  `${base}.token-share-${index + 1}-of-${shares.length}.txt`,
+                );
+              }
               notify(
-                `${shares.length} token shares generated. Store them separately.`,
+                `${shares.length} separate token share files generated. Keep each one apart.`,
                 "success",
               );
             } catch (error) {
@@ -210,8 +204,12 @@ export function TokenPanel() {
           }}
         >
           <Download className="h-3 w-3" />
-          Download token shares
+          Download separate share files
         </Button>
+        <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+          Each download contains exactly one share. Store them on separate devices or
+          locations; any threshold subset reconstructs the token.
+        </p>
       </PanelSection>
 
       <PanelSection

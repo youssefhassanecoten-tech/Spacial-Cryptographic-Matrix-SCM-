@@ -151,6 +151,24 @@ export function DecryptPanel() {
           placeholder="SCMSHARE1..."
           className="scm-scroll w-full resize-none rounded-lg border border-white/10 bg-black/30 p-2 font-mono text-[8px] leading-relaxed text-slate-300 focus:border-cyan-400/50 focus:outline-none"
         />
+        <input
+          type="file"
+          multiple
+          accept=".txt,text/plain"
+          onChange={async (event) => {
+            const files = Array.from(event.target.files ?? []);
+            const contents = await Promise.all(files.map((file) => file.text()));
+            if (contents.length > 0) {
+              setShareText((current) =>
+                [current, ...contents]
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+                  .join("\n"),
+              );
+            }
+          }}
+          className="mt-2 block w-full text-[9px] text-slate-400 file:mr-2 file:rounded-md file:border-0 file:bg-cyan-400/15 file:px-2 file:py-1 file:text-[9px] file:text-cyan-200"
+        />
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           <Button
             size="sm"

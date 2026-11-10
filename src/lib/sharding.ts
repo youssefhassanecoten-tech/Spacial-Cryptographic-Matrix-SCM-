@@ -117,19 +117,22 @@ export function splitTokenShares(
   total: number,
 ): string[] {
   const shares = splitSecret(textEncoder.encode(token), threshold, total);
-  return shares.map((share) =>
-    `${SHARE_PREFIX}.${bytesToBase64Url(
+  return shares.map((share) => {
+    const data = bytesToBase64Url(share.data);
+    const check = toHex(sha256(share.data)).slice(0, 16);
+    return `${SHARE_PREFIX}.${bytesToBase64Url(
       textEncoder.encode(
         JSON.stringify({
           v: 1,
           k: threshold,
           n: total,
           x: share.x,
-          data: bytesToBase64Url(share.data),
+          data,
+          check,
         }),
       ),
-    )}`,
-  );
+    )}`;
+  });
 }
 
 export function recoverTokenFromShares(values: string[]): string {
@@ -144,7 +147,14 @@ export function recoverTokenFromShares(values: string[]): string {
         textDecoder.decode(
           base64UrlToBytes(value.slice(SHARE_PREFIX.length + 1)),
         ),
-      ) as { v: number; k: number; n: number; x: number; data: string };
+      ) as {
+        v: number;
+        k: number;
+        n: number;
+        x: number;
+        data: string;
+        check?: string;
+      };
       if (
         payload.v !== 1 ||
         !Number.isInteger(payload.k) ||
@@ -153,12 +163,19 @@ export function recoverTokenFromShares(values: string[]): string {
       ) {
         throw new Error("SCM token share is invalid.");
       }
+      const data = base64UrlToBytes(payload.data);
+      if (
+        payload.check &&
+        toHex(sha256(data)).slice(0, 16) !== payload.check.toLowerCase()
+      ) {
+        throw new Error("SCM token share failed its checksum.");
+      }
       return {
         k: payload.k,
         n: payload.n,
         share: {
           x: payload.x,
-          data: base64UrlToBytes(payload.data),
+          data,
         },
       };
     });

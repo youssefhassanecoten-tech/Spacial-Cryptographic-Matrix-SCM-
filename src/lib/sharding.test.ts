@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { sha256Hex } from "./crypto";
+import {
+  base64UrlToBytes,
+  bytesToBase64Url,
+  sha256Hex,
+} from "./crypto";
 import { buildMerkleTree, merkleProof, toHex, verifyMerkleProof } from "./merkle";
 import {
   buildShardPackageFiles,
@@ -95,5 +99,25 @@ describe("Merkle proofs", () => {
     expect(
       verifyMerkleProof(tampered, merkleProof(tree, 0), toHex(tree.root)),
     ).toBe(false);
+  });
+});
+
+describe("Token share integrity", () => {
+  it("rejects a damaged token share before reconstruction", () => {
+    const shares = splitTokenShares("SCM1.checksum-test", 3, 5);
+    const payload = JSON.parse(
+      new TextDecoder().decode(
+        base64UrlToBytes(shares[0].slice("SCMSHARE1.".length)),
+      ),
+    );
+    const data = base64UrlToBytes(payload.data);
+    data[0] ^= 0xff;
+    payload.data = bytesToBase64Url(data);
+    const tampered = `SCMSHARE1.${bytesToBase64Url(
+      new TextEncoder().encode(JSON.stringify(payload)),
+    )}`;
+    expect(() =>
+      recoverTokenFromShares([tampered, shares[1], shares[2]]),
+    ).toThrow(/checksum/);
   });
 });
