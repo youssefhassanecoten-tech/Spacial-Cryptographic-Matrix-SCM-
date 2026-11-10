@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+import { tokenRequiresPassphrase } from "../lib/crypto";
 import type { UnlockResult } from "../store/useStudio";
 import { useStudio } from "../store/useStudio";
 import { Button, Field } from "./ui";
@@ -29,6 +30,7 @@ export function UnlockForm({
   const storedPackage = useStudio((state) => state.packageBlob);
   const notify = useStudio((state) => state.notify);
   const [token, setToken] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [packageFile, setPackageFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -45,14 +47,23 @@ export function UnlockForm({
     try {
       const result =
         mode === "view"
-          ? await unlockPayload(token, packageFile)
-          : await unlockForEdit(token, packageFile);
+          ? await unlockPayload(
+              token,
+              packageFile,
+              passphrase || undefined,
+            )
+          : await unlockForEdit(
+              token,
+              packageFile,
+              passphrase || undefined,
+            );
       if (!result.ok) {
         setError(result.error ?? "Unable to unlock this SCM.");
         setNeedsPackage(Boolean(result.needsPackage));
         return;
       }
       setToken("");
+      setPassphrase("");
       setPackageFile(null);
       setNeedsPackage(false);
       notify(
@@ -105,6 +116,24 @@ export function UnlockForm({
             spellCheck={false}
             placeholder="SCM1.eyJ2IjoxLCJuIjoi…"
             className="w-full resize-none rounded-lg border border-white/10 bg-black/35 p-2 font-mono text-[9px] leading-relaxed text-slate-300 placeholder:text-slate-600 focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30"
+          />
+        </Field>
+
+        <Field
+          label="Token passphrase"
+          hint={
+            token && tokenRequiresPassphrase(token)
+              ? "Required for this token"
+              : "Optional unless the token is passphrase-locked"
+          }
+        >
+          <input
+            type="password"
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+            autoComplete="current-password"
+            placeholder="Leave empty for older tokens"
+            className="h-9 w-full rounded-lg border border-white/10 bg-black/35 px-2.5 font-mono text-[10px] text-slate-300 placeholder:text-slate-600 focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30"
           />
         </Field>
 

@@ -11,12 +11,24 @@ const TOKEN_PREFIX = "SCM1";
 const CONTAINER_PREFIX = "SCMC1";
 const PAYLOAD_KINDS: PayloadKind[] = ["text", "image", "video", "document"];
 const KEY_MATERIAL = "scm-studio::duo-system::v1::local-first-matrix::aes-gcm";
+const PBKDF2_ITERATIONS = 310000;
 
-interface TokenEnvelope {
+interface TokenEnvelopeV1 {
   v: 1;
   n: string;
   c: string;
 }
+
+interface TokenEnvelopeV2 {
+  v: 2;
+  kdf: "PBKDF2-SHA256";
+  i: number;
+  s: string;
+  n: string;
+  c: string;
+}
+
+type TokenEnvelope = TokenEnvelopeV1 | TokenEnvelopeV2;
 
 export function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -69,6 +81,89 @@ export async function encryptPayload(payload: SCMTokenPayload): Promise<string> 
     c: bytesToBase64Url(new Uint8Array(cipher)),
   };
   return `${TOKEN_PREFIX}.${bytesToBase64Url(encoder.encode(JSON.stringify(envelope)))}`;
+}
+
+async function derivePassphraseKey(
+  passphrase: string,
+  salt: Uint8Array<ArrayBuffer>,
+  iterations: number,
+): Promise<CryptoKey> {
+  const encoder = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(passphrase),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations,
+      hash: "SHA-256",
+    },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+export async function encryptPayloadWithPassphrase(
+  payload: SCMTokenPayload,
+  passphrase: string,
+): Promise<string> {
+  if (passphrase.length < 8) {
+    throw new Error("Token passphrase must be at least 8 characters.");
+  }
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await derivePassphraseKey(
+    passphrase,
+    salt,
+    PBKDF2_ITERATIONS,
+  );
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    encoder.encode(JSON.stringify(payload)),
+  );
+  const envelope: TokenEnvelopeV2 = {
+    v: 2,
+    kdf: "PBKDF2-SHA256",
+    i: PBKDF2_ITERATIONS,
+    s: bytesToBase64Url(salt),
+    n: bytesToBase64Url(iv),
+    c: bytesToBase64Url(new Uint8Array(cipher)),
+  };
+  return `${TOKEN_PREFIX}.${bytesToBase64Url(
+    encoder.encode(JSON.stringify(envelope)),
+  )}`;
+}
+
+function parseTokenEnvelope(token: string): TokenEnvelope {
+  const trimmed = token.trim();
+  if (!trimmed.startsWith(`${TOKEN_PREFIX}.`)) {
+    throw new Error("This is not an SCM1 digital card token.");
+  }
+  const encoded = trimmed.slice(TOKEN_PREFIX.length + 1);
+  try {
+    return JSON.parse(
+      new TextDecoder().decode(base64UrlToBytes(encoded)),
+    ) as TokenEnvelope;
+  } catch {
+    throw new Error("Token envelope is malformed.");
+  }
+}
+
+export function tokenRequiresPassphrase(token: string): boolean {
+  try {
+    return parseTokenEnvelope(token).v === 2;
+  } catch {
+    return false;
+  }
 }
 
 function validateContent(value: unknown): SCMPayload | undefined {
@@ -415,23 +510,40 @@ export function embeddedPayloadBytes(payload: SCMPayload | null): Uint8Array<Arr
   return base64UrlToBytes(payload.data);
 }
 
-export async function decryptToken(token: string): Promise<SCMTokenPayload> {
-  const trimmed = token.trim();
-  if (!trimmed.startsWith(`${TOKEN_PREFIX}.`)) {
-    throw new Error("This is not an SCM1 digital card token.");
-  }
-  const encoded = trimmed.slice(TOKEN_PREFIX.length + 1);
+export async function decryptToken(
+  token: string,
+  passphrase?: string,
+): Promise<SCMTokenPayload> {
   const decoder = new TextDecoder();
-  let envelope: TokenEnvelope;
-  try {
-    envelope = JSON.parse(decoder.decode(base64UrlToBytes(encoded))) as TokenEnvelope;
-  } catch {
-    throw new Error("Token envelope is malformed.");
-  }
-  if (envelope.v !== 1 || typeof envelope.n !== "string" || typeof envelope.c !== "string") {
+  const envelope = parseTokenEnvelope(token);
+  if (
+    (envelope.v !== 1 && envelope.v !== 2) ||
+    typeof envelope.n !== "string" ||
+    typeof envelope.c !== "string"
+  ) {
     throw new Error("Token envelope is incomplete.");
   }
-  const key = await getKey();
+  let key: CryptoKey;
+  if (envelope.v === 2) {
+    if (
+      envelope.kdf !== "PBKDF2-SHA256" ||
+      !Number.isInteger(envelope.i) ||
+      envelope.i < 100000 ||
+      typeof envelope.s !== "string"
+    ) {
+      throw new Error("Passphrase-locked token envelope is invalid.");
+    }
+    if (!passphrase) {
+      throw new Error("This token is passphrase-locked. Enter the passphrase.");
+    }
+    key = await derivePassphraseKey(
+      passphrase,
+      base64UrlToBytes(envelope.s),
+      envelope.i,
+    );
+  } else {
+    key = await getKey();
+  }
   let plain: ArrayBuffer;
   try {
     plain = await crypto.subtle.decrypt(
@@ -440,7 +552,11 @@ export async function decryptToken(token: string): Promise<SCMTokenPayload> {
       base64UrlToBytes(envelope.c),
     );
   } catch {
-    throw new Error("Token authentication failed: the SCM payload was rejected.");
+    throw new Error(
+      envelope.v === 2
+        ? "Passphrase authentication failed."
+        : "Token authentication failed: the SCM payload was rejected.",
+    );
   }
   let parsed: unknown;
   try {

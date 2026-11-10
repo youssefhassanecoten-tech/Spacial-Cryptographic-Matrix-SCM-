@@ -162,6 +162,7 @@ export function PayloadPanel() {
 
   const [text, setText] = useState("");
   const [label, setLabel] = useState(matrix.label);
+  const [passphrase, setPassphrase] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
@@ -204,13 +205,14 @@ export function PayloadPanel() {
   const handleSeal = async () => {
     setBusy(true);
     setError("");
-    const result = await sealPayload(label);
+    const result = await sealPayload(label, passphrase.trim() || undefined);
     if (!result.ok) {
       setError(result.error ?? "Unable to seal this SCM.");
       setBusy(false);
       return;
     }
     setText("");
+    setPassphrase("");
     if (result.packageBlob) {
       await downloadBlob(
         result.packageBlob,
@@ -384,6 +386,19 @@ export function PayloadPanel() {
             maxLength={48}
           />
           <Badge tone="cyan">{formatBytes(totalSize)}</Badge>
+        </div>
+        <div className="mt-1.5">
+          <TextInput
+            type="password"
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+            placeholder="Optional token passphrase (8+ characters)"
+            autoComplete="new-password"
+          />
+          <p className="mt-1 text-[9px] leading-relaxed text-slate-500">
+            If set, the private token is passphrase-locked. Share the passphrase
+            separately from the token and package.
+          </p>
         </div>
 
         <div className="mt-2">

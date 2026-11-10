@@ -8,8 +8,10 @@ import {
   decryptToken,
   embeddedPayloadBytes,
   encryptPayload,
+  encryptPayloadWithPassphrase,
   parsePayloadContainer,
   sha256Hex,
+  tokenRequiresPassphrase,
 } from "./crypto";
 import {
   autoGridSizeForBytes,
@@ -660,5 +662,25 @@ describe("Phase 13 package authentication", () => {
       }),
     });
     expect(unlock.ok).toBe(false);
+  });
+});
+
+describe("Passphrase-locked tokens", () => {
+  it("requires the correct passphrase and rejects wrong or missing ones", async () => {
+    const passphrase = "correct horse battery staple";
+    const token = await encryptPayloadWithPassphrase(
+      matrixToPayload(matrix),
+      passphrase,
+    );
+    expect(tokenRequiresPassphrase(token)).toBe(true);
+    await expect(decryptToken(token)).rejects.toThrow(/passphrase-locked/);
+    await expect(decryptToken(token, "wrong passphrase")).rejects.toThrow(
+      /Passphrase authentication failed/,
+    );
+    const payload = await decryptToken(token, passphrase);
+    expect(payload.id).toBe(matrix.id);
+    expect(payload.anchors).toEqual(
+      matrix.anchors.map((anchor) => anchor.coord),
+    );
   });
 });

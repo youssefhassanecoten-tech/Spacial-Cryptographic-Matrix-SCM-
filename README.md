@@ -117,7 +117,7 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Outputs: `release-electron/SCM-Studio-Setup-1.9.0.exe`, `release-electron/SCM-Studio-Portable-1.9.0.exe`, `latest.yml`, and the blockmap.
+Outputs: `release-electron/SCM-Studio-Setup-1.10.0.exe`, `release-electron/SCM-Studio-Portable-1.10.0.exe`, `latest.yml`, and the blockmap.
 
 Local copies live in `release/`. The NSIS installer supports automatic minor updates through `electron-updater`. The portable executable is unsigned, so Windows SmartScreen may warn on first launch, and portable builds do not self-update. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 
@@ -179,7 +179,7 @@ $env:VITE_PUBLIC_APP_URL="https://youssefhassanecoten-tech.github.io/Spacial-Cry
 npm.cmd run build
 ```
 
-## Threshold shares and package shards
+- Optional passphrase-locked tokens use PBKDF2-SHA256, so the token alone is not enough.\n- Packages above 64 MB stream encrypted chunks to OPFS when the browser supports it.\n\n## Threshold shares and package shards
 
 - **Token shares:** split the private token into a 2-of-3, 3-of-5, or 4-of-7 Shamir share set. Any threshold subset reconstructs it.
 - **Package shards:** split a small encrypted package into `k`-of-`n` Reed-Solomon shards. Each `.scmshard` file carries a Merkle proof and its own index.

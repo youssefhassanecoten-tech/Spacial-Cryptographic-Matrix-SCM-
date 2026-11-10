@@ -16,6 +16,7 @@ import {
   bytesToBase64Url,
   decryptToken,
   encryptPayload,
+  encryptPayloadWithPassphrase,
   getAppBaseUrl,
   sha256Hex,
 } from "./crypto";
@@ -669,6 +670,67 @@ async function encryptChunk(
   return { iv, cipher: new Uint8Array(cipher) };
 }
 
+interface PackageSink {
+  write: (part: Uint8Array<ArrayBuffer>) => Promise<void>;
+  finish: (headerParts: BlobPart[]) => Promise<Blob>;
+}
+
+function memoryPackageSink(): PackageSink {
+  const parts: BlobPart[] = [];
+  return {
+    write: async (part) => {
+      parts.push(new Blob([part]));
+    },
+    finish: async (headerParts) =>
+      new Blob([...headerParts, ...parts], {
+        type: "application/x-scm-package",
+      }),
+  };
+}
+
+async function diskPackageSink(): Promise<PackageSink | null> {
+  const storage = navigator.storage as StorageManager & {
+    getDirectory?: () => Promise<FileSystemDirectoryHandle>;
+  };
+  if (typeof storage?.getDirectory !== "function") {
+    return null;
+  }
+  try {
+    const root = await storage.getDirectory();
+    const directory = await root.getDirectoryHandle("scm-packages", {
+      create: true,
+    });
+    const tempName = `tmp-${crypto.randomUUID()}.bin`;
+    const tempHandle = await directory.getFileHandle(tempName, {
+      create: true,
+    });
+    const tempWritable = await tempHandle.createWritable();
+    return {
+      write: async (part) => {
+        await tempWritable.write(part);
+      },
+      finish: async (headerParts) => {
+        await tempWritable.close();
+        const finalName = `package-${Date.now()}-${crypto.randomUUID()}.scm`;
+        const finalHandle = await directory.getFileHandle(finalName, {
+          create: true,
+        });
+        const finalWritable = await finalHandle.createWritable();
+        for (const part of headerParts) {
+          await finalWritable.write(part);
+        }
+        const tempFile = await tempHandle.getFile();
+        await tempFile.stream().pipeTo(finalWritable);
+        const file = await finalHandle.getFile();
+        await directory.removeEntry(tempName).catch(() => undefined);
+        return file;
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function buildPackage(
   drafts: PayloadDraftItem[],
   manifestItems: SCMPayloadItem[],
@@ -711,7 +773,10 @@ export async function buildPackage(
   );
   const compression =
     typeof CompressionStream === "undefined" ? "none" : "gzip";
-  const chunkParts: BlobPart[] = [];
+  const totalBytes = sorted.reduce((sum, draft) => sum + draft.size, 0);
+  const sink =
+    (totalBytes > 64 * 1024 * 1024 ? await diskPackageSink() : null) ??
+    memoryPackageSink();
   const chunks: number[] = [];
   const chunkLeaves: Uint8Array[] = [];
 
@@ -741,7 +806,7 @@ export async function buildPackage(
       part.set(iv, 4);
       part.set(cipher, 16);
       chunkLeaves.push(sha256(part));
-      chunkParts.push(new Blob([part]));
+      await sink.write(part);
       chunkIndex += 1;
     }
     chunks.push(chunkIndex);
@@ -774,10 +839,12 @@ export async function buildPackage(
   };
   const headerBytes = textEncoder.encode(JSON.stringify(header));
   const magic = textEncoder.encode(PACKAGE_V2_MAGIC);
-  return new Blob(
-    [magic, uint32Bytes(headerBytes.length), headerBytes, manifestCipher, ...chunkParts],
-    { type: "application/x-scm-package" },
-  );
+  return sink.finish([
+    magic,
+    uint32Bytes(headerBytes.length),
+    headerBytes,
+    manifestCipher,
+  ]);
 }
 
 async function parsePackageV1(
@@ -1076,6 +1143,7 @@ export async function sealVault(
   gridSizeInput = 9,
   fillMode: FillMode = "full",
   revealType: ExplosionType = "radial",
+  passphrase?: string,
 ): Promise<SealArtifacts> {
   if (drafts.length === 0) {
     throw new Error("Add at least one text or file item before sealing.");
@@ -1109,7 +1177,9 @@ export async function sealVault(
     manifest.contentRoot,
     manifest,
   );
-  const token = await encryptPayload(payload);
+  const token = passphrase
+    ? await encryptPayloadWithPassphrase(payload, passphrase)
+    : await encryptPayload(payload);
   const packageBlob =
     packageDrafts.length > 0
       ? await buildPackage(
@@ -1170,12 +1240,13 @@ async function manifestFromLegacy(payload: SCMTokenPayload): Promise<SCMPayloadM
 
 export async function unlockVault(options: {
   token: string;
+  passphrase?: string;
   expectedShape?: SCMShapePayload | null;
   packageInput?: Blob | null;
   storedPackage?: Blob | null;
 }): Promise<UnlockVaultResult> {
   try {
-    const payload = await decryptToken(options.token);
+    const payload = await decryptToken(options.token, options.passphrase);
     const shape = shapeFromPrivateToken(payload);
     if (options.expectedShape) {
       const expected = options.expectedShape;

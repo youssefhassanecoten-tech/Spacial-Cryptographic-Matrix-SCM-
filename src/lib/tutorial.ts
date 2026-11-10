@@ -130,6 +130,18 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     tab: "decrypt",
   },
   {
+    id: "passphrase",
+    sinceVersion: "1.10.0",
+    title: "Passphrase-locked tokens",
+    body: "Set an optional passphrase before sealing. The private token is then encrypted with a PBKDF2-derived key, so the token alone is not enough.",
+    bullets: [
+      "Share the passphrase separately from the token and package.",
+      "Older tokens still unlock without a passphrase.",
+      "Large packages above 64 MB use the browser's OPFS disk storage for assembly when available.",
+    ],
+    tab: "payload",
+  },
+  {
     id: "shares-split",
     sinceVersion: "1.9.0",
     title: "Separate share files",
