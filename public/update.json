@@ -1,11 +1,11 @@
 {
-  "version": "1.5.0",
-  "notes": "Lattice cap raised to 33³ with an 8 GB payload limit. Large uploads now stay lazy, compress per file, and encrypt in authenticated 4 MB chunks so GB-scale files no longer need to fit in memory.",
-  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.5.0",
+  "version": "1.6.0",
+  "notes": "Security hardening for large packages: each encrypted chunk now uses a unique HKDF-derived key, and the chunk list is committed with a Merkle root so tampering is rejected.",
+  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.6.0",
   "downloads": {
     "web": "https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/",
-    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.5.0/SCM-Studio-1.5.0.apk",
-    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.5.0/SCM-Studio-Setup-1.5.0.exe",
-    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.5.0"
+    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.6.0/SCM-Studio-1.6.0.apk",
+    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.6.0/SCM-Studio-Setup-1.6.0.exe",
+    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.6.0"
   }
 }

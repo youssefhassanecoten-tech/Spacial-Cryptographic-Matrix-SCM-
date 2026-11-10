@@ -610,9 +610,17 @@ describe("Phase 12 streaming package chunks", () => {
     const headerLength = new DataView(buffer).getUint32(5, true);
     const header = JSON.parse(
       new TextDecoder().decode(raw.subarray(9, 9 + headerLength)),
-    ) as { v: number; chunks: number[]; compression: string };
+    ) as {
+      v: number;
+      chunks: number[];
+      compression: string;
+      kdf: string;
+      chunkRoot: string;
+    };
     expect(header.v).toBe(2);
     expect(header.compression).toBe("gzip");
+    expect(header.kdf).toBe("hkdf-chunk-v1");
+    expect(header.chunkRoot).toMatch(/^[0-9a-f]{64}$/);
     expect(header.chunks[0]).toBeGreaterThan(1);
 
     const unlocked = await unlockVault({
@@ -625,5 +633,32 @@ describe("Phase 12 streaming package chunks", () => {
     const restored = new Uint8Array(await file!.blob!.arrayBuffer());
     expect(restored[0]).toBe(bytes[0]);
     expect(restored[size - 1]).toBe(bytes[size - 1]);
+  });
+});
+
+describe("Phase 13 package authentication", () => {
+  it("rejects a package with a tampered chunk", async () => {
+    const bytes = new Uint8Array(4096).fill(7);
+    const draft: PayloadDraftItem = {
+      id: "tamper-doc",
+      kind: "document",
+      name: "tamper.bin",
+      path: "tamper.bin",
+      mime: "application/octet-stream",
+      size: bytes.byteLength,
+      bytes,
+    };
+    const artifacts = await sealVault([draft], "Tamper", 9, "full");
+    const tampered = new Uint8Array(
+      await artifacts.packageBlob!.arrayBuffer(),
+    );
+    tampered[tampered.length - 1] ^= 0xff;
+    const unlock = await unlockVault({
+      token: artifacts.token,
+      packageInput: new Blob([tampered], {
+        type: "application/x-scm-package",
+      }),
+    });
+    expect(unlock.ok).toBe(false);
   });
 });

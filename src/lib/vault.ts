@@ -19,6 +19,7 @@ import {
   getAppBaseUrl,
   sha256Hex,
 } from "./crypto";
+import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import {
   createMatrixFromSeed,
@@ -27,6 +28,7 @@ import {
   normalizeGridSize,
   stableHash,
 } from "./scm";
+import { merkleRoot, toHex } from "./merkle";
 import { resolveExplosionType } from "./reveal";
 import { randomId } from "./rng";
 import { MAX_PAYLOAD_BYTES } from "../types";
@@ -148,6 +150,8 @@ interface PackageHeaderV2 {
   chunkSize: number;
   chunks: number[];
   compression: "gzip" | "none";
+  kdf?: "hkdf-chunk-v1";
+  chunkRoot?: string;
 }
 
 function uint32Bytes(value: number): Uint8Array<ArrayBuffer> {
@@ -569,18 +573,51 @@ export async function createEmptyVault(matrix: SCMMatrix): Promise<{
   return { token, shapeToken: encodeShapeToken(shape), shape, manifest };
 }
 
+async function deriveContentKeyBytes(
+  salt: string,
+  contentRoot: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  return new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-256",
+      textEncoder.encode(`scm-content-v2:${salt}:${contentRoot}`),
+    ),
+  );
+}
+
 async function deriveContentKey(
   salt: string,
   contentRoot: string,
 ): Promise<CryptoKey> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    textEncoder.encode(`scm-content-v2:${salt}:${contentRoot}`),
-  );
-  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, [
+  const bytes = await deriveContentKeyBytes(salt, contentRoot);
+  return crypto.subtle.importKey("raw", bytes, { name: "AES-GCM" }, false, [
     "encrypt",
     "decrypt",
   ]);
+}
+
+async function deriveChunkKey(
+  contentKeyBytes: Uint8Array<ArrayBuffer>,
+  tokenId: string,
+  fileId: string,
+  chunkIndex: number,
+): Promise<CryptoKey> {
+  const derived = new Uint8Array(
+    hkdf(
+      sha256,
+      contentKeyBytes,
+      textEncoder.encode(tokenId),
+      textEncoder.encode(`scm-chunk-v1:${fileId}:${chunkIndex}`),
+      32,
+    ),
+  );
+  return crypto.subtle.importKey(
+    "raw",
+    derived,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"],
+  );
 }
 
 async function* readChunks(
@@ -664,11 +701,19 @@ export async function buildPackage(
     };
   });
 
-  const key = await deriveContentKey(salt, contentRoot);
+  const contentKeyBytes = await deriveContentKeyBytes(salt, contentRoot);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    contentKeyBytes,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"],
+  );
   const compression =
     typeof CompressionStream === "undefined" ? "none" : "gzip";
   const chunkParts: BlobPart[] = [];
   const chunks: number[] = [];
+  const chunkLeaves: Uint8Array[] = [];
 
   for (const draft of sorted) {
     let source: ReadableStream<Uint8Array> = draftBlob(draft).stream();
@@ -684,11 +729,18 @@ export async function buildPackage(
       const aad = textEncoder.encode(
         `${PACKAGE_V2_MAGIC}:${tokenId}:${draft.id}:${chunkIndex}`,
       );
-      const { iv, cipher } = await encryptChunk(key, plain, aad);
+      const chunkKey = await deriveChunkKey(
+        contentKeyBytes,
+        tokenId,
+        draft.id,
+        chunkIndex,
+      );
+      const { iv, cipher } = await encryptChunk(chunkKey, plain, aad);
       const part = new Uint8Array(4 + 12 + cipher.byteLength);
       new DataView(part.buffer).setUint32(0, cipher.byteLength, true);
       part.set(iv, 4);
       part.set(cipher, 16);
+      chunkLeaves.push(sha256(part));
       chunkParts.push(new Blob([part]));
       chunkIndex += 1;
     }
@@ -717,6 +769,8 @@ export async function buildPackage(
     chunkSize: PACKAGE_CHUNK_SIZE,
     chunks,
     compression,
+    kdf: "hkdf-chunk-v1",
+    chunkRoot: toHex(merkleRoot(chunkLeaves)),
   };
   const headerBytes = textEncoder.encode(JSON.stringify(header));
   const magic = textEncoder.encode(PACKAGE_V2_MAGIC);
@@ -839,12 +893,23 @@ async function parsePackageV2(
     header.shapeId !== shapeId ||
     header.contentRoot !== contentRoot ||
     (header.compression !== "gzip" && header.compression !== "none") ||
-    !Array.isArray(header.chunks)
+    !Array.isArray(header.chunks) ||
+    (header.kdf !== undefined && header.kdf !== "hkdf-chunk-v1") ||
+    (header.chunkRoot !== undefined &&
+      !/^[0-9a-f]{64}$/i.test(header.chunkRoot))
   ) {
     throw new Error("SCM package does not belong to this token.");
   }
 
-  const key = await deriveContentKey(salt, contentRoot);
+  const contentKeyBytes = await deriveContentKeyBytes(salt, contentRoot);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    contentKeyBytes,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"],
+  );
+  const chunkLeaves: Uint8Array[] = [];
   const manifestStart = 9 + headerLength;
   const manifestCipher = await readBlobSlice(
     blob,
@@ -929,12 +994,26 @@ async function parsePackageV2(
             throw new Error("SCM package chunk is truncated.");
           }
           chunkCursor += 16 + cipherLength;
+          const part = new Uint8Array(4 + 12 + cipherLength);
+          part.set(lengthBytes, 0);
+          part.set(iv, 4);
+          part.set(cipher, 16);
+          chunkLeaves.push(sha256(part));
           const aad = textEncoder.encode(
             `${PACKAGE_V2_MAGIC}:${tokenId}:${entry.id}:${chunkIndex}`,
           );
+          const chunkKey =
+            header.kdf === "hkdf-chunk-v1"
+              ? await deriveChunkKey(
+                  contentKeyBytes,
+                  tokenId,
+                  entry.id,
+                  chunkIndex,
+                )
+              : key;
           const plain = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv, additionalData: aad },
-            key,
+            chunkKey,
             cipher,
           );
           chunkIndex += 1;
@@ -963,6 +1042,12 @@ async function parsePackageV2(
       throw new Error(`Integrity check failed for ${entry.name}.`);
     }
     files.set(entry.id, fileBlob);
+  }
+  if (header.chunkRoot) {
+    const root = toHex(merkleRoot(chunkLeaves));
+    if (root !== header.chunkRoot.toLowerCase()) {
+      throw new Error("SCM package chunk Merkle root does not match.");
+    }
   }
   return files;
 }
