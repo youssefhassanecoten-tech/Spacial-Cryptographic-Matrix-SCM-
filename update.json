@@ -1,11 +1,11 @@
 {
-  "version": "1.8.1",
-  "notes": "Printability disclaimers for thin, perforated, or overhanging shapes, oversized print footprints, and payloads above the printable shard-net limit.",
-  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.8.1",
+  "version": "1.9.0",
+  "notes": "Token shares now export as separate files with per-share checksums, and the Decrypt tab can import separate share files for recovery.",
+  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.9.0",
   "downloads": {
     "web": "https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/",
-    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.8.1/SCM-Studio-1.8.1.apk",
-    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.8.1/SCM-Studio-Setup-1.8.1.exe",
-    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.8.1"
+    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.9.0/SCM-Studio-1.9.0.apk",
+    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.9.0/SCM-Studio-Setup-1.9.0.exe",
+    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.9.0"
   }
 }

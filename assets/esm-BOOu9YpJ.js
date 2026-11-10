@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/web-DdLzzDqL.js","assets/index-CriI2dWl.js","assets/index-DCxbU1qA.css"])))=>i.map(i=>d[i]);
+import{i as e,r as t}from"./index-CriI2dWl.js";var n=t(`Share`,{web:()=>e(()=>import(`./web-DdLzzDqL.js`).then(e=>new e.ShareWeb),__vite__mapDeps([0,1,2]))});export{n as Share};
