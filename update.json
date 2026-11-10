@@ -1,11 +1,11 @@
 {
-  "version": "1.10.0",
-  "notes": "Optional passphrase-locked private tokens and OPFS-backed package streaming for large uploads. Token shares now export as separate files.",
-  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.10.0",
+  "version": "1.11.0",
+  "notes": "Passphrase UX, separate share checksums, QR share cards and scanner, Ed25519 provenance, block-based OPFS shards, and audit-readiness documentation.",
+  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.11.0",
   "downloads": {
     "web": "https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/",
-    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.10.0/SCM-Studio-1.10.0.apk",
-    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.10.0/SCM-Studio-Setup-1.10.0.exe",
-    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.10.0"
+    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.11.0/SCM-Studio-1.11.0.apk",
+    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.11.0/SCM-Studio-Setup-1.11.0.exe",
+    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.11.0"
   }
 }
