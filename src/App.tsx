@@ -6,6 +6,7 @@ import { StudioPanel } from "./components/StudioPanel";
 import { CanvasOverlay } from "./components/CanvasOverlay";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { RevealOverlay } from "./components/RevealOverlay";
+import { TutorialOverlay } from "./components/TutorialOverlay";
 import { UpdateManager } from "./components/UpdateManager";
 import { GuestView } from "./components/GuestView";
 import { Toasts } from "./components/Toasts";
@@ -107,6 +108,7 @@ export default function App() {
       )}
       <RevealOverlay />
       <UpdateManager />
+      <TutorialOverlay />
       <Toasts />
     </div>
   );

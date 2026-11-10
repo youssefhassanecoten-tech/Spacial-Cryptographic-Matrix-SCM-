@@ -67,6 +67,7 @@ Supported matrix sizes: **3³, 6³, 9³, 12³, 15³, 18³, 21³, 24³, 27³, 30�
 - Contrast guard, alignment anchors, macro-block cage, and token trajectory overlays
 - Reorderable cascade timeline: explode, layer wave, pulse, glow, and scanline
 - Clickable home logo and collapsible studio sidebar
+- First-run tutorial plus a versioned what-is-new tour for returning users
 
 ### Multi-item payload vault
 - Text, images, video, documents, and whole folders in one SCM
@@ -116,7 +117,7 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Outputs: `release-electron/SCM-Studio-Setup-1.7.0.exe`, `release-electron/SCM-Studio-Portable-1.7.0.exe`, `latest.yml`, and the blockmap.
+Outputs: `release-electron/SCM-Studio-Setup-1.8.0.exe`, `release-electron/SCM-Studio-Portable-1.8.0.exe`, `latest.yml`, and the blockmap.
 
 Local copies live in `release/`. The NSIS installer supports automatic minor updates through `electron-updater`. The portable executable is unsigned, so Windows SmartScreen may warn on first launch, and portable builds do not self-update. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 

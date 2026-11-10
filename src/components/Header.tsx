@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  BookOpen,
   Boxes,
   KeyRound,
   LoaderCircle,
@@ -12,6 +13,7 @@ import { copyText } from "../lib/clipboard";
 import { getAppBaseUrl } from "../lib/crypto";
 import { buildGuestLink } from "../lib/vault";
 import { useStudio } from "../store/useStudio";
+import { useTutorial } from "../store/useTutorial";
 import { Badge, Button, IconButton } from "./ui";
 
 export function Header() {
@@ -99,6 +101,12 @@ export function Header() {
       <div className="ml-auto flex items-center gap-1.5">
         {!guestMode ? (
           <>
+            <IconButton
+              label="Open tutorial"
+              onClick={() => useTutorial.getState().show(true)}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+            </IconButton>
             <IconButton
               label={sidebarCollapsed ? "Open studio sidebar" : "Collapse studio sidebar"}
               onClick={toggleSidebar}
