@@ -1,4 +1,6 @@
+import { useState } from "react";
 import {
+  Copy,
   FileArchive,
   FileText,
   Image,
@@ -6,9 +8,16 @@ import {
   LockKeyhole,
   ShieldCheck,
   Sparkles,
+  Split,
   Video,
 } from "lucide-react";
+import { copyText } from "../../lib/clipboard";
+import { downloadBlob } from "../../lib/download";
 import { EXPLOSION_LABELS } from "../../lib/reveal";
+import {
+  recoverPackageFromShardFiles,
+  recoverTokenFromShares,
+} from "../../lib/sharding";
 import { useStudio } from "../../store/useStudio";
 import { UnlockForm } from "../UnlockForm";
 import { Badge, Button, PanelSection, StatRow } from "../ui";
@@ -26,6 +35,10 @@ export function DecryptPanel() {
   const drafts = useStudio((state) => state.drafts);
   const revealStyle = useStudio((state) => state.revealStyle);
   const setTab = useStudio((state) => state.setTab);
+  const [shareText, setShareText] = useState("");
+  const [recoveredToken, setRecoveredToken] = useState("");
+  const [shardFiles, setShardFiles] = useState<File[]>([]);
+  const [recoveredPackage, setRecoveredPackage] = useState<Blob | null>(null);
 
   return (
     <div className="space-y-3">
@@ -122,6 +135,128 @@ export function DecryptPanel() {
         action={<Badge tone="amber">required</Badge>}
       >
         <UnlockForm mode="view" compact />
+      </PanelSection>
+
+      <PanelSection
+        icon={<Split className="h-3.5 w-3.5" />}
+        title="Recover Token from Shares"
+        hint="Paste k token shares, one per line, to reconstruct the private ID token."
+        action={<Badge tone="violet">k-of-n</Badge>}
+      >
+        <textarea
+          value={shareText}
+          onChange={(event) => setShareText(event.target.value)}
+          rows={4}
+          spellCheck={false}
+          placeholder="SCMSHARE1..."
+          className="scm-scroll w-full resize-none rounded-lg border border-white/10 bg-black/30 p-2 font-mono text-[8px] leading-relaxed text-slate-300 focus:border-cyan-400/50 focus:outline-none"
+        />
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!shareText.trim()}
+            onClick={() => {
+              try {
+                const token = recoverTokenFromShares(shareText.split(/\s+/));
+                setRecoveredToken(token);
+              } catch (error) {
+                setRecoveredToken("");
+                useStudio.getState().notify(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to recover token.",
+                  "error",
+                );
+              }
+            }}
+          >
+            <KeyRound className="h-3 w-3" />
+            Recover token
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!recoveredToken}
+            onClick={async () => {
+              const ok = await copyText(recoveredToken);
+              useStudio.getState().notify(
+                ok ? "Recovered token copied." : "Clipboard access denied.",
+                ok ? "success" : "error",
+              );
+            }}
+          >
+            <Copy className="h-3 w-3" />
+            Copy recovered
+          </Button>
+        </div>
+        {recoveredToken ? (
+          <p className="mt-2 break-all rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] p-2 font-mono text-[8px] leading-relaxed text-emerald-200">
+            {recoveredToken}
+          </p>
+        ) : null}
+      </PanelSection>
+
+      <PanelSection
+        icon={<FileArchive className="h-3.5 w-3.5" />}
+        title="Recover .scm from Shards"
+        hint="Select at least k .scmshard files to rebuild the encrypted package."
+        action={<Badge tone="cyan">v3</Badge>}
+      >
+        <input
+          type="file"
+          multiple
+          accept=".scmshard,application/x-scm-shard"
+          onChange={(event) =>
+            setShardFiles(Array.from(event.target.files ?? []))
+          }
+          className="block w-full text-[9px] text-slate-400 file:mr-2 file:rounded-md file:border-0 file:bg-cyan-400/15 file:px-2 file:py-1 file:text-[9px] file:text-cyan-200"
+        />
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={shardFiles.length === 0}
+            onClick={async () => {
+              try {
+                const recovered = await recoverPackageFromShardFiles(shardFiles);
+                setRecoveredPackage(recovered);
+                useStudio.getState().notify(
+                  "Package reconstructed from shards.",
+                  "success",
+                );
+              } catch (error) {
+                setRecoveredPackage(null);
+                useStudio.getState().notify(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to recover package.",
+                  "error",
+                );
+              }
+            }}
+          >
+            <Split className="h-3 w-3" />
+            Rebuild package
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!recoveredPackage}
+            onClick={() => {
+              if (!recoveredPackage) {
+                return;
+              }
+              void downloadBlob(recoveredPackage, "recovered.scm");
+            }}
+          >
+            <FileArchive className="h-3 w-3" />
+            Download .scm
+          </Button>
+        </div>
+        <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+          Recovered packages still need the matching private token to unlock.
+        </p>
       </PanelSection>
 
       <PanelSection

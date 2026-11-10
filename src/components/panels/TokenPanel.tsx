@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Copy,
   Download,
@@ -11,13 +12,20 @@ import {
   QrCode,
   RefreshCw,
   ShieldCheck,
+  Split,
 } from "lucide-react";
 import { copyText } from "../../lib/clipboard";
 import { tokenFingerprint } from "../../lib/crypto";
 import { downloadBlob, downloadText, safeFilename } from "../../lib/download";
+import {
+  buildShardPackageFiles,
+  MAX_SHARD_PACKAGE_BYTES,
+  splitTokenShares,
+} from "../../lib/sharding";
+import { buildShardCubeNetSvg } from "../../lib/shardSheet";
 import { buildGuestLink } from "../../lib/vault";
 import { useStudio } from "../../store/useStudio";
-import { Badge, Button, PanelSection, StatRow } from "../ui";
+import { Badge, Button, PanelSection, Segmented, StatRow } from "../ui";
 
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
@@ -45,6 +53,8 @@ export function TokenPanel() {
   const checking = useUpdates((state) => state.checking);
   const error = useUpdates((state) => state.error);
   const check = useUpdates((state) => state.check);
+  const [shareMode, setShareMode] = useState("3-5");
+  const [packageShardMode, setPackageShardMode] = useState("3-5");
 
   const guestLink = shapeToken ? buildGuestLink(shapeToken) : "";
   const fingerprint = token ? tokenFingerprint(token) : "—";
@@ -146,6 +156,63 @@ export function TokenPanel() {
       </PanelSection>
 
       <PanelSection
+        icon={<Split className="h-3.5 w-3.5" />}
+        title="Threshold Token Shares"
+        hint="Split the private token into shares. Any k of n shares reconstruct it. Each share is as sensitive as the token."
+        action={<Badge tone="violet">k-of-n</Badge>}
+      >
+        <Segmented
+          value={shareMode}
+          onChange={setShareMode}
+          options={[
+            { value: "2-3", label: "2 of 3" },
+            { value: "3-5", label: "3 of 5" },
+            { value: "4-7", label: "4 of 7" },
+          ]}
+          columns={3}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-2 w-full"
+          disabled={!token}
+          onClick={() => {
+            const [threshold, total] = shareMode.split("-").map(Number);
+            try {
+              const shares = splitTokenShares(token, threshold, total);
+              const [k, n] = shareMode.split("-");
+              const content = [
+                "SCM TOKEN SHARES",
+                `threshold=${k}`,
+                `total=${n}`,
+                "Keep each share separate. Any fewer than the threshold cannot recover the token.",
+                "",
+                ...shares,
+              ].join("\n");
+              void downloadText(
+                content,
+                `${safeFilename(matrix.label)}.token-shares.txt`,
+              );
+              notify(
+                `${shares.length} token shares generated. Store them separately.`,
+                "success",
+              );
+            } catch (error) {
+              notify(
+                error instanceof Error
+                  ? error.message
+                  : "Unable to split token.",
+                "error",
+              );
+            }
+          }}
+        >
+          <Download className="h-3 w-3" />
+          Download token shares
+        </Button>
+      </PanelSection>
+
+      <PanelSection
         icon={<Link2 className="h-3.5 w-3.5" />}
         title="Public Shape Link"
         hint="This is the QR payload. It opens the guest viewer with the exact 3D shape but no content."
@@ -213,6 +280,112 @@ export function TokenPanel() {
           Share the package separately from the QR. The token is the key; the package
           is the encrypted content.
         </p>
+        <div className="mt-3 border-t border-white/[0.06] pt-3">
+          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+            Shard this package
+          </p>
+          <Segmented
+            value={packageShardMode}
+            onChange={setPackageShardMode}
+            options={[
+              { value: "2-3", label: "2 of 3" },
+              { value: "3-5", label: "3 of 5" },
+              { value: "4-7", label: "4 of 7" },
+            ]}
+            columns={3}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2 w-full"
+            disabled={!packageBlob || packageBlob.size > MAX_SHARD_PACKAGE_BYTES}
+            onClick={async () => {
+              if (!packageBlob) {
+                return;
+              }
+              const [threshold, total] = packageShardMode
+                .split("-")
+                .map(Number);
+              try {
+                const files = await buildShardPackageFiles(
+                  new Uint8Array(await packageBlob.arrayBuffer()),
+                  threshold,
+                  total,
+                );
+                const base = safeFilename(matrix.label);
+                for (let index = 0; index < files.length; index += 1) {
+                  await downloadBlob(
+                    files[index],
+                    `${base}.shard-${index + 1}-of-${files.length}.scmshard`,
+                  );
+                }
+                notify(
+                  `${files.length} package shards exported. Keep at least ${threshold} separate.`,
+                  "success",
+                );
+              } catch (error) {
+                notify(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to shard package.",
+                  "error",
+                );
+              }
+            }}
+          >
+            <Download className="h-3 w-3" />
+            Export package shards
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-1.5 w-full"
+            disabled={!packageBlob || packageBlob.size > 6 * 1024}
+            onClick={async () => {
+              if (!packageBlob) {
+                return;
+              }
+              const [threshold, total] = packageShardMode
+                .split("-")
+                .map(Number);
+              try {
+                const files = await buildShardPackageFiles(
+                  new Uint8Array(await packageBlob.arrayBuffer()),
+                  threshold,
+                  total,
+                );
+                const sheet = await buildShardCubeNetSvg(
+                  files,
+                  matrix.label,
+                  threshold,
+                  total,
+                );
+                await downloadBlob(
+                  sheet,
+                  `${safeFilename(matrix.label)}.shard-cube-net.svg`,
+                );
+                notify(
+                  "Printable shard cube net exported. Print at 100% and fold on the dashed edges.",
+                  "success",
+                );
+              } catch (error) {
+                notify(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to build shard cube net.",
+                  "error",
+                );
+              }
+            }}
+          >
+            <QrCode className="h-3 w-3" />
+            Printable cube net
+          </Button>
+          <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+            Shard export is limited to 16 MB packages. The printable cube net is for
+            small packages because each face carries one QR shard.
+          </p>
+        </div>
       </PanelSection>
 
       <PanelSection

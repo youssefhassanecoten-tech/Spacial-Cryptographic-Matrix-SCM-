@@ -116,7 +116,7 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Outputs: `release-electron/SCM-Studio-Setup-1.6.0.exe`, `release-electron/SCM-Studio-Portable-1.6.0.exe`, `latest.yml`, and the blockmap.
+Outputs: `release-electron/SCM-Studio-Setup-1.7.0.exe`, `release-electron/SCM-Studio-Portable-1.7.0.exe`, `latest.yml`, and the blockmap.
 
 Local copies live in `release/`. The NSIS installer supports automatic minor updates through `electron-updater`. The portable executable is unsigned, so Windows SmartScreen may warn on first launch, and portable builds do not self-update. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 
@@ -177,6 +177,13 @@ $env:VITE_BASE_PATH="/Spacial-Cryptographic-Matrix-SCM-/"
 $env:VITE_PUBLIC_APP_URL="https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/"
 npm.cmd run build
 ```
+
+## Threshold shares and package shards
+
+- **Token shares:** split the private token into a 2-of-3, 3-of-5, or 4-of-7 Shamir share set. Any threshold subset reconstructs it.
+- **Package shards:** split a small encrypted package into `k`-of-`n` Reed-Solomon shards. Each `.scmshard` file carries a Merkle proof and its own index.
+- **Recovery:** select any `k` shard files to rebuild the `.scm` package, then unlock it with the token.
+- **Printable cube net:** small packages can export an SVG cube net with one QR shard per face. This is the first limited spatial data object: print, fold, and recover from enough faces.
 
 ## Experimental local cipher (unaudited)
 

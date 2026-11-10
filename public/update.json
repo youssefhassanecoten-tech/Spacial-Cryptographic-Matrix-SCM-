@@ -1,11 +1,11 @@
 {
-  "version": "1.6.0",
-  "notes": "Security hardening for large packages: each encrypted chunk now uses a unique HKDF-derived key, and the chunk list is committed with a Merkle root so tampering is rejected.",
-  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.6.0",
+  "version": "1.7.0",
+  "notes": "Threshold token shares, k-of-n package shards, Merkle-proof shard files, and a printable shard cube net for small spatial data objects.",
+  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.7.0",
   "downloads": {
     "web": "https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/",
-    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.6.0/SCM-Studio-1.6.0.apk",
-    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.6.0/SCM-Studio-Setup-1.6.0.exe",
-    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.6.0"
+    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.7.0/SCM-Studio-1.7.0.apk",
+    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.7.0/SCM-Studio-Setup-1.7.0.exe",
+    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.7.0"
   }
 }

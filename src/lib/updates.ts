@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 
 export const APP_VERSION =
-  typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "1.6.0";
+  typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "1.7.0";
 
 export type AppPlatform = "web" | "android" | "ios" | "desktop";
 export type UpdateKind = "none" | "minor" | "major";
