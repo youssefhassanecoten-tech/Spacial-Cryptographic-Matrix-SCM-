@@ -16,18 +16,25 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { copyText } from "../../lib/clipboard";
-import { tokenFingerprint } from "../../lib/crypto";
+import {
+  tokenFingerprint,
+  tokenRequiresPassphrase,
+} from "../../lib/crypto";
 import { downloadBlob, downloadText, safeFilename } from "../../lib/download";
 import {
   buildShardPackageFiles,
-  MAX_SHARD_PACKAGE_BYTES,
+  buildShardPackageFilesFromBlob,
   splitTokenShares,
 } from "../../lib/sharding";
-import { buildShardCubeNetSvg } from "../../lib/shardSheet";
+import {
+  buildShardCubeNetSvg,
+  buildTokenShareSheetSvg,
+} from "../../lib/shardSheet";
 import { packagePrintWarning } from "../../lib/printability";
 import { buildGuestLink } from "../../lib/vault";
 import { useStudio } from "../../store/useStudio";
 import { Badge, Button, PanelSection, Segmented, StatRow } from "../ui";
+import { ProvenancePanel } from "./ProvenancePanel";
 
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
@@ -106,7 +113,17 @@ export function TokenPanel() {
             }
             tone={sealedStats ? "emerald" : "slate"}
           />
-          <StatRow label="private token" value={`${token.length} chars`} />
+          <StatRow
+            label="private token"
+            value={
+              token
+                ? `${token.length} chars · ${
+                    tokenRequiresPassphrase(token) ? "passphrase" : "legacy"
+                  }`
+                : "none"
+            }
+            tone={token && tokenRequiresPassphrase(token) ? "emerald" : "amber"}
+          />
           <StatRow label="fingerprint" value={fingerprint} tone="emerald" />
           <StatRow
             label="shape token"
@@ -126,6 +143,12 @@ export function TokenPanel() {
           spellCheck={false}
           className="scm-scroll mt-2 w-full resize-none rounded-lg border border-white/10 bg-black/35 p-2 font-mono text-[8px] leading-relaxed text-slate-400 focus:outline-none"
         />
+        {token && !tokenRequiresPassphrase(token) ? (
+          <p className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-2 text-[9px] leading-relaxed text-amber-200">
+            Legacy token: this token uses the older static-key envelope. Re-seal
+            with a passphrase to make the token alone insufficient.
+          </p>
+        ) : null}
 
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           <Button
@@ -205,6 +228,42 @@ export function TokenPanel() {
         >
           <Download className="h-3 w-3" />
           Download separate share files
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-1.5 w-full"
+          disabled={!token}
+          onClick={async () => {
+            const [threshold, total] = shareMode.split("-").map(Number);
+            try {
+              const shares = splitTokenShares(token, threshold, total);
+              const sheet = buildTokenShareSheetSvg(
+                shares,
+                matrix.label,
+                threshold,
+                total,
+              );
+              await downloadBlob(
+                sheet,
+                `${safeFilename(matrix.label)}.token-share-cards.svg`,
+              );
+              notify(
+                "Token share cards exported. Print at 100%, cut, and store each card separately.",
+                "success",
+              );
+            } catch (error) {
+              notify(
+                error instanceof Error
+                  ? error.message
+                  : "Unable to build token share cards.",
+                "error",
+              );
+            }
+          }}
+        >
+          <QrCode className="h-3 w-3" />
+          Print token share cards
         </Button>
         <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
           Each download contains exactly one share. Store them on separate devices or
@@ -298,7 +357,7 @@ export function TokenPanel() {
             size="sm"
             variant="outline"
             className="mt-2 w-full"
-            disabled={!packageBlob || packageBlob.size > MAX_SHARD_PACKAGE_BYTES}
+            disabled={!packageBlob}
             onClick={async () => {
               if (!packageBlob) {
                 return;
@@ -307,8 +366,8 @@ export function TokenPanel() {
                 .split("-")
                 .map(Number);
               try {
-                const files = await buildShardPackageFiles(
-                  new Uint8Array(await packageBlob.arrayBuffer()),
+                const files = await buildShardPackageFilesFromBlob(
+                  packageBlob,
                   threshold,
                   total,
                 );
@@ -388,11 +447,14 @@ export function TokenPanel() {
             </p>
           ) : null}
           <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
-            Shard export is limited to 16 MB packages. The printable cube net is for
-            small packages because each face carries one QR shard.
+            Large packages use block-based shards and OPFS when available. The
+            printable cube net is still limited to small packages because each face
+            carries one QR shard.
           </p>
         </div>
       </PanelSection>
+
+      <ProvenancePanel />
 
       <PanelSection
         icon={<FileKey className="h-3.5 w-3.5" />}

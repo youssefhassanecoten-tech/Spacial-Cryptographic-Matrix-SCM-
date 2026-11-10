@@ -40,6 +40,7 @@ import {
   unlockVault,
   type PayloadDraftItem,
   type SealArtifacts,
+  type SealProgress,
 } from "../lib/vault";
 
 const initialMatrix = createBlankMatrix();
@@ -143,6 +144,9 @@ export interface StudioState {
   previousVersions: SealedVersion[];
   reveal: RevealResult | null;
   revealPulse: number;
+  sealProgress: SealProgress | null;
+  sealAbort: AbortController | null;
+  cancelSeal: () => void;
   setDesign: (patch: Partial<DesignState>) => void;
   setLayer: (id: string, patch: Partial<AnimationLayer>) => void;
   toggleLayer: (id: string) => void;
@@ -276,6 +280,11 @@ export const useStudio = create<StudioState>((set, get) => ({
   previousVersions: [],
   reveal: null,
   revealPulse: 0,
+  sealProgress: null,
+  sealAbort: null,
+  cancelSeal: () => {
+    get().sealAbort?.abort();
+  },
 
   setDesign: (patch) =>
     set((state) => ({ design: { ...state.design, ...patch } })),
@@ -490,7 +499,13 @@ export const useStudio = create<StudioState>((set, get) => ({
     if (drafts.length === 0) {
       return { ok: false, error: "Add at least one item before sealing." };
     }
-    set({ tokenStatus: "syncing", tokenError: null });
+    const controller = new AbortController();
+    set({
+      tokenStatus: "syncing",
+      tokenError: null,
+      sealProgress: { phase: "Preparing", done: 0, total: 1 },
+      sealAbort: controller,
+    });
     try {
       const gridSize = resolveGridSize(get().gridChoice, drafts);
       const artifacts: SealArtifacts = await sealVault(
@@ -500,6 +515,10 @@ export const useStudio = create<StudioState>((set, get) => ({
         get().fillChoice,
         get().revealStyle,
         passphrase,
+        {
+          signal: controller.signal,
+          onProgress: (progress) => set({ sealProgress: progress }),
+        },
       );
       const previous = sealedVersionFrom(token, shapeToken, packageBlob);
       get().timeRef.current = 0;
@@ -540,11 +559,25 @@ export const useStudio = create<StudioState>((set, get) => ({
         packageBlob: artifacts.packageBlob,
       };
     } catch (error) {
+      if (controller.signal.aborted) {
+        set({
+          tokenStatus: "idle",
+          tokenError: null,
+          sealProgress: null,
+          sealAbort: null,
+        });
+        get().notify("Sealing cancelled.", "info");
+        return { ok: false, error: "Sealing cancelled." };
+      }
       const message =
         error instanceof Error ? error.message : "Unable to seal this SCM.";
       set({ tokenStatus: "error", tokenError: message });
       get().notify(message, "error");
       return { ok: false, error: message };
+    } finally {
+      if (get().sealAbort === controller) {
+        set({ sealProgress: null, sealAbort: null });
+      }
     }
   },
 

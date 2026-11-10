@@ -55,16 +55,39 @@ export function draftBlob(draft: PayloadDraftItem): Blob {
   return draft.blob ?? new Blob([draft.bytes]);
 }
 
-export async function sha256Blob(blob: Blob): Promise<string> {
+export interface SealProgress {
+  phase: string;
+  done: number;
+  total: number;
+}
+
+export interface SealOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: SealProgress) => void;
+}
+
+export async function sha256Blob(
+  blob: Blob,
+  options?: {
+    signal?: AbortSignal;
+    onProgress?: (done: number, total: number) => void;
+  },
+): Promise<string> {
   const hasher = sha256.create();
   const reader = blob.stream().getReader();
+  let done = 0;
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
+    if (options?.signal?.aborted) {
+      throw new Error("Sealing cancelled.");
+    }
+    const result = await reader.read();
+    if (result.done) {
       break;
     }
-    if (value) {
-      hasher.update(value);
+    if (result.value) {
+      hasher.update(result.value);
+      done += result.value.byteLength;
+      options?.onProgress?.(done, blob.size);
     }
   }
   return Array.from(hasher.digest(), (value) =>
@@ -72,9 +95,20 @@ export async function sha256Blob(blob: Blob): Promise<string> {
   ).join("");
 }
 
-async function sha256Draft(draft: PayloadDraftItem): Promise<string> {
+async function sha256Draft(
+  draft: PayloadDraftItem,
+  options?: SealOptions,
+): Promise<string> {
   if (draft.blob) {
-    return sha256Blob(draft.blob);
+    return sha256Blob(draft.blob, {
+      signal: options?.signal,
+      onProgress: (done, total) =>
+        options?.onProgress?.({
+          phase: `Hashing ${draft.path}`,
+          done,
+          total,
+        }),
+    });
   }
   return sha256Hex(draft.bytes);
 }
@@ -259,6 +293,7 @@ export async function computeContentRoot(items: SCMPayloadItem[]): Promise<strin
 
 export async function buildManifest(
   drafts: PayloadDraftItem[],
+  options?: SealOptions,
 ): Promise<BuildManifestResult> {
   const totalSize = drafts.reduce((sum, draft) => sum + draft.size, 0);
   if (totalSize > MAX_TOTAL_PAYLOAD_BYTES) {
@@ -277,8 +312,17 @@ export async function buildManifest(
   const items: SCMPayloadItem[] = [];
   const packageDrafts: PayloadDraftItem[] = [];
 
-  for (const draft of sorted) {
-    const sha256 = await sha256Draft(draft);
+  for (let index = 0; index < sorted.length; index += 1) {
+    if (options?.signal?.aborted) {
+      throw new Error("Sealing cancelled.");
+    }
+    const draft = sorted[index];
+    options?.onProgress?.({
+      phase: `Hashing ${draft.path}`,
+      done: index,
+      total: sorted.length,
+    });
+    const sha256 = await sha256Draft(draft, options);
     const canEmbed =
       draft.kind === "text" &&
       draft.size <= MAX_EMBEDDED_ITEM_BYTES &&
@@ -738,6 +782,7 @@ export async function buildPackage(
   shapeId: string,
   salt: string,
   contentRoot: string,
+  options?: SealOptions,
 ): Promise<Blob> {
   const sorted = drafts
     .slice()
@@ -780,7 +825,16 @@ export async function buildPackage(
   const chunks: number[] = [];
   const chunkLeaves: Uint8Array[] = [];
 
-  for (const draft of sorted) {
+  for (let draftIndex = 0; draftIndex < sorted.length; draftIndex += 1) {
+    if (options?.signal?.aborted) {
+      throw new Error("Sealing cancelled.");
+    }
+    const draft = sorted[draftIndex];
+    options?.onProgress?.({
+      phase: `Encrypting ${draft.path}`,
+      done: draftIndex,
+      total: sorted.length,
+    });
     let source: ReadableStream<Uint8Array> = draftBlob(draft).stream();
     if (compression === "gzip") {
       source = source.pipeThrough(
@@ -791,6 +845,9 @@ export async function buildPackage(
     }
     let chunkIndex = 0;
     for await (const plain of readChunks(source, PACKAGE_CHUNK_SIZE)) {
+      if (options?.signal?.aborted) {
+        throw new Error("Sealing cancelled.");
+      }
       const aad = textEncoder.encode(
         `${PACKAGE_V2_MAGIC}:${tokenId}:${draft.id}:${chunkIndex}`,
       );
@@ -1144,11 +1201,12 @@ export async function sealVault(
   fillMode: FillMode = "full",
   revealType: ExplosionType = "radial",
   passphrase?: string,
+  options?: SealOptions,
 ): Promise<SealArtifacts> {
   if (drafts.length === 0) {
     throw new Error("Add at least one text or file item before sealing.");
   }
-  const { manifest, packageDrafts } = await buildManifest(drafts);
+  const { manifest, packageDrafts } = await buildManifest(drafts, options);
   const salt = randomSalt();
   const gridSize = normalizeGridSize(gridSizeInput);
   const seed = await deriveSeedFromContent(salt, manifest.contentRoot);
@@ -1189,6 +1247,7 @@ export async function sealVault(
           shape.shapeId,
           salt,
           manifest.contentRoot,
+          options,
         )
       : null;
   return {

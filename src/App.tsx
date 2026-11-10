@@ -9,6 +9,7 @@ import { RevealOverlay } from "./components/RevealOverlay";
 import { TutorialOverlay } from "./components/TutorialOverlay";
 import { UpdateManager } from "./components/UpdateManager";
 import { GuestView } from "./components/GuestView";
+import { cleanupStaleOpfsPackages } from "./lib/opfs";
 import { Toasts } from "./components/Toasts";
 import { Scene } from "./components/scene/Scene";
 
@@ -38,6 +39,7 @@ export default function App() {
       return;
     }
     bootstrapped = true;
+    void cleanupStaleOpfsPackages();
     void useStudio.getState().bootstrap();
   }, []);
 

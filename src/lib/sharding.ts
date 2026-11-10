@@ -3,6 +3,7 @@ import { base64UrlToBytes, bytesToBase64Url, sha256Hex } from "./crypto";
 import { gfDiv, gfMatrixInverse, gfMul, gfPow } from "./gf256";
 import {
   buildMerkleTree,
+  hexToBytes,
   merkleProof,
   toHex,
   verifyMerkleProof,
@@ -13,7 +14,10 @@ const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const SHARE_PREFIX = "SCMSHARE1";
 const SHARD_MAGIC = "SCMSH3";
+const SHARD_V4_MAGIC = "SCMSH4";
+const SHARD_BLOCK_SIZE = 4 * 1024 * 1024;
 export const MAX_SHARD_PACKAGE_BYTES = 16 * 1024 * 1024;
+export const MAX_STREAMED_SHARD_PACKAGE_BYTES = 8 * 1024 * 1024 * 1024;
 
 export interface ShamirShare {
   x: number;
@@ -33,6 +37,20 @@ export interface ShardHeader {
   packageSize: number;
   shardLength: number;
   packageHash: string;
+  shardRoot: string;
+  proof: MerkleProofStep[];
+}
+
+interface ShardHeaderV4 {
+  v: 4;
+  k: number;
+  n: number;
+  index: number;
+  packageSize: number;
+  packageHash: string;
+  blockSize: number;
+  blockLengths: number[];
+  shardLengths: number[];
   shardRoot: string;
   proof: MerkleProofStep[];
 }
@@ -310,6 +328,291 @@ export async function buildShardPackageFiles(
   });
 }
 
+async function sha256BlobHex(blob: Blob): Promise<string> {
+  const hasher = sha256.create();
+  const reader = blob.stream().getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value) {
+      hasher.update(value);
+    }
+  }
+  return toHex(hasher.digest());
+}
+
+export async function buildLargeShardPackageFiles(
+  packageBlob: Blob,
+  threshold: number,
+  total: number,
+  options?: { blockSize?: number; forceMemory?: boolean },
+): Promise<Blob[]> {
+  validateThreshold(threshold, total);
+  if (packageBlob.size > MAX_STREAMED_SHARD_PACKAGE_BYTES) {
+    throw new Error("Package is above the 8 GB shard limit.");
+  }
+  const blockSize = options?.blockSize ?? SHARD_BLOCK_SIZE;
+  const blockCount = Math.ceil(packageBlob.size / blockSize);
+  const blockLengths: number[] = [];
+  const shardLengths: number[] = [];
+  const packageHash = await sha256BlobHex(packageBlob);
+
+  const storage = navigator.storage as StorageManager & {
+    getDirectory?: () => Promise<FileSystemDirectoryHandle>;
+  };
+  const useDisk =
+    !options?.forceMemory &&
+    typeof storage?.getDirectory === "function" &&
+    packageBlob.size > 64 * 1024 * 1024;
+
+  if (!useDisk) {
+    if (packageBlob.size > 64 * 1024 * 1024) {
+      throw new Error(
+        "Large shard export needs OPFS support in this browser.",
+      );
+    }
+    const shardParts = Array.from(
+      { length: total },
+      () => [] as Uint8Array<ArrayBuffer>[],
+    );
+    for (let block = 0; block < blockCount; block += 1) {
+      const start = block * blockSize;
+      const end = Math.min(packageBlob.size, start + blockSize);
+      const bytes = new Uint8Array(
+        await packageBlob.slice(start, end).arrayBuffer(),
+      );
+      blockLengths.push(bytes.byteLength);
+      const shards = erasureEncode(bytes, threshold, total);
+      shardLengths.push(shards[0].data.byteLength);
+      for (let index = 0; index < total; index += 1) {
+        shardParts[index].push(shards[index].data);
+      }
+    }
+    const shardBlobs = shardParts.map(
+      (parts) => new Blob(parts, { type: "application/x-scm-shard" }),
+    );
+    const leaves = await Promise.all(
+      shardBlobs.map(async (blob) => hexToBytes(await sha256BlobHex(blob))),
+    );
+    const tree = buildMerkleTree(leaves);
+    return Promise.all(
+      shardBlobs.map(async (data, index) => {
+        const header: ShardHeaderV4 = {
+          v: 4,
+          k: threshold,
+          n: total,
+          index,
+          packageSize: packageBlob.size,
+          packageHash,
+          blockSize,
+          blockLengths,
+          shardLengths,
+          shardRoot: toHex(tree.root),
+          proof: merkleProof(tree, index),
+        };
+        const headerBytes = textEncoder.encode(JSON.stringify(header));
+        const length = new Uint8Array(4);
+        new DataView(length.buffer).setUint32(0, headerBytes.byteLength, true);
+        return new Blob(
+          [
+            textEncoder.encode(SHARD_V4_MAGIC),
+            length,
+            headerBytes,
+            data,
+          ],
+          { type: "application/x-scm-shard" },
+        );
+      }),
+    );
+  }
+
+  const root = await storage.getDirectory!();
+  const directory = await root.getDirectoryHandle("scm-shards", {
+    create: true,
+  });
+  const tempHandles: FileSystemFileHandle[] = [];
+  const tempWritables: FileSystemWritableFileStream[] = [];
+  try {
+    for (let index = 0; index < total; index += 1) {
+      const name = `tmp-${crypto.randomUUID()}-${index}.bin`;
+      const handle = await directory.getFileHandle(name, { create: true });
+      tempHandles.push(handle);
+      tempWritables.push(await handle.createWritable());
+    }
+    for (let block = 0; block < blockCount; block += 1) {
+      const start = block * blockSize;
+      const end = Math.min(packageBlob.size, start + blockSize);
+      const bytes = new Uint8Array(
+        await packageBlob.slice(start, end).arrayBuffer(),
+      );
+      blockLengths.push(bytes.byteLength);
+      const shards = erasureEncode(bytes, threshold, total);
+      shardLengths.push(shards[0].data.byteLength);
+      for (let index = 0; index < total; index += 1) {
+        await tempWritables[index].write(shards[index].data);
+      }
+    }
+    await Promise.all(tempWritables.map((writable) => writable.close()));
+    const leaves = await Promise.all(
+      tempHandles.map(async (handle) =>
+        hexToBytes(await sha256BlobHex(await handle.getFile())),
+      ),
+    );
+    const tree = buildMerkleTree(leaves);
+    const files: Blob[] = [];
+    for (let index = 0; index < total; index += 1) {
+      const header: ShardHeaderV4 = {
+        v: 4,
+        k: threshold,
+        n: total,
+        index,
+        packageSize: packageBlob.size,
+        packageHash,
+        blockSize,
+        blockLengths,
+        shardLengths,
+        shardRoot: toHex(tree.root),
+        proof: merkleProof(tree, index),
+      };
+      const headerBytes = textEncoder.encode(JSON.stringify(header));
+      const length = new Uint8Array(4);
+      new DataView(length.buffer).setUint32(0, headerBytes.byteLength, true);
+      const finalName = `shard-${Date.now()}-${crypto.randomUUID()}-${index}.scmshard`;
+      const finalHandle = await directory.getFileHandle(finalName, {
+        create: true,
+      });
+      const finalWritable = await finalHandle.createWritable();
+      await finalWritable.write(textEncoder.encode(SHARD_V4_MAGIC));
+      await finalWritable.write(length);
+      await finalWritable.write(headerBytes);
+      const tempFile = await tempHandles[index].getFile();
+      await tempFile.stream().pipeTo(finalWritable);
+      files.push(await finalHandle.getFile());
+    }
+    return files;
+  } finally {
+    for (let index = 0; index < tempHandles.length; index += 1) {
+      const name = tempHandles[index].name;
+      await directory.removeEntry(name).catch(() => undefined);
+    }
+  }
+}
+
+async function parseShardFileV4(blob: Blob): Promise<{
+  header: ShardHeaderV4;
+  dataStart: number;
+  data: Blob;
+}> {
+  const magic = textDecoder.decode(
+    new Uint8Array(await blob.slice(0, 6).arrayBuffer()),
+  );
+  if (magic !== SHARD_V4_MAGIC) {
+    throw new Error("This is not an SCM v4 shard file.");
+  }
+  const headerLength = new DataView(
+    await blob.slice(6, 10).arrayBuffer(),
+  ).getUint32(0, true);
+  if (headerLength <= 0 || 10 + headerLength > blob.size) {
+    throw new Error("SCM shard header is corrupt.");
+  }
+  const header = JSON.parse(
+    textDecoder.decode(
+      await blob.slice(10, 10 + headerLength).arrayBuffer(),
+    ),
+  ) as ShardHeaderV4;
+  const dataStart = 10 + headerLength;
+  if (
+    header.v !== 4 ||
+    !Number.isInteger(header.index) ||
+    header.index < 0 ||
+    header.index >= header.n ||
+    !Array.isArray(header.blockLengths) ||
+    !Array.isArray(header.shardLengths) ||
+    header.blockLengths.length !== header.shardLengths.length
+  ) {
+    throw new Error("SCM shard header is invalid.");
+  }
+  const data = blob.slice(dataStart);
+  const expected = header.shardLengths.reduce(
+    (sum, length) => sum + length,
+    0,
+  );
+  if (data.size !== expected) {
+    throw new Error("SCM shard data is truncated.");
+  }
+  if (
+    !verifyMerkleProof(
+      sha256(new Uint8Array(await data.arrayBuffer())),
+      header.proof,
+      header.shardRoot,
+    )
+  ) {
+    throw new Error("SCM shard proof does not match its root.");
+  }
+  return { header, dataStart, data };
+}
+
+async function recoverPackageFromV4Shards(files: Blob[]): Promise<Blob> {
+  const parsed = await Promise.all(files.map(parseShardFileV4));
+  const first = parsed[0].header;
+  if (
+    parsed.some(
+      (entry) =>
+        entry.header.k !== first.k ||
+        entry.header.n !== first.n ||
+        entry.header.packageSize !== first.packageSize ||
+        entry.header.packageHash !== first.packageHash ||
+        JSON.stringify(entry.header.blockLengths) !==
+          JSON.stringify(first.blockLengths) ||
+        JSON.stringify(entry.header.shardLengths) !==
+          JSON.stringify(first.shardLengths),
+    )
+  ) {
+    throw new Error("SCM shards belong to different packages.");
+  }
+  if (parsed.length < first.k) {
+    throw new Error(`Need at least ${first.k} shards to recover this package.`);
+  }
+  const unique = new Map<number, (typeof parsed)[number]>();
+  for (const entry of parsed) {
+    unique.set(entry.header.index, entry);
+  }
+  if (unique.size < first.k) {
+    throw new Error("SCM shard indexes are duplicated.");
+  }
+  const selected = Array.from(unique.values()).slice(0, first.k);
+  const offsets: number[] = [];
+  let offset = 0;
+  for (const length of first.shardLengths) {
+    offsets.push(offset);
+    offset += length;
+  }
+  const parts: BlobPart[] = [];
+  for (let block = 0; block < first.blockLengths.length; block += 1) {
+    const shares: ErasureShare[] = [];
+    for (const entry of selected) {
+      const start = offsets[block];
+      const end = start + first.shardLengths[block];
+      shares.push({
+        index: entry.header.index,
+        data: new Uint8Array(await entry.data.slice(start, end).arrayBuffer()),
+      });
+    }
+    parts.push(
+      erasureDecode(shares, first.k, first.blockLengths[block]),
+    );
+  }
+  const packageBlob = new Blob(parts, {
+    type: "application/x-scm-package",
+  });
+  if ((await sha256BlobHex(packageBlob)) !== first.packageHash) {
+    throw new Error("Recovered package hash does not match.");
+  }
+  return packageBlob;
+}
+
 async function parseShardFile(blob: Blob): Promise<{
   header: ShardHeader;
   data: Uint8Array<ArrayBuffer>;
@@ -351,11 +654,32 @@ async function parseShardFile(blob: Blob): Promise<{
   return { header, data };
 }
 
+export async function buildShardPackageFilesFromBlob(
+  packageBlob: Blob,
+  threshold: number,
+  total: number,
+): Promise<Blob[]> {
+  if (packageBlob.size <= MAX_SHARD_PACKAGE_BYTES) {
+    return buildShardPackageFiles(
+      new Uint8Array(await packageBlob.arrayBuffer()),
+      threshold,
+      total,
+    );
+  }
+  return buildLargeShardPackageFiles(packageBlob, threshold, total);
+}
+
 export async function recoverPackageFromShardFiles(
   files: Blob[],
 ): Promise<Blob> {
   if (files.length === 0) {
     throw new Error("Add at least one SCM shard file.");
+  }
+  const magic = textDecoder.decode(
+    new Uint8Array(await files[0].slice(0, 6).arrayBuffer()),
+  );
+  if (magic === SHARD_V4_MAGIC) {
+    return recoverPackageFromV4Shards(files);
   }
   const parsed = await Promise.all(files.map(parseShardFile));
   const { k, n, packageSize, packageHash, shardLength } = parsed[0].header;

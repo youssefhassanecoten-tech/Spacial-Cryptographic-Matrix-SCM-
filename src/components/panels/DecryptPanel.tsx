@@ -12,6 +12,7 @@ import {
   Video,
 } from "lucide-react";
 import { copyText } from "../../lib/clipboard";
+import { base64UrlToBytes } from "../../lib/crypto";
 import { downloadBlob } from "../../lib/download";
 import { EXPLOSION_LABELS } from "../../lib/reveal";
 import {
@@ -19,6 +20,7 @@ import {
   recoverTokenFromShares,
 } from "../../lib/sharding";
 import { useStudio } from "../../store/useStudio";
+import { QrScanner } from "../QrScanner";
 import { UnlockForm } from "../UnlockForm";
 import { Badge, Button, PanelSection, StatRow } from "../ui";
 
@@ -37,8 +39,32 @@ export function DecryptPanel() {
   const setTab = useStudio((state) => state.setTab);
   const [shareText, setShareText] = useState("");
   const [recoveredToken, setRecoveredToken] = useState("");
-  const [shardFiles, setShardFiles] = useState<File[]>([]);
+  const [shardFiles, setShardFiles] = useState<Blob[]>([]);
   const [recoveredPackage, setRecoveredPackage] = useState<Blob | null>(null);
+
+  const handleQrValue = (value: string) => {
+    if (value.startsWith("SCMSHARE1.")) {
+      setShareText((current) =>
+        [current, value].map((entry) => entry.trim()).filter(Boolean).join("\n"),
+      );
+      useStudio.getState().notify("Token share QR added.", "success");
+      return;
+    }
+    if (value.startsWith("SCMSHARDB64.")) {
+      try {
+        const bytes = base64UrlToBytes(value.slice("SCMSHARDB64.".length));
+        setShardFiles((current) => [
+          ...current,
+          new Blob([bytes], { type: "application/x-scm-shard" }),
+        ]);
+        useStudio.getState().notify("Package shard QR added.", "success");
+      } catch {
+        useStudio.getState().notify("Shard QR is corrupt.", "error");
+      }
+      return;
+    }
+    useStudio.getState().notify("Unrecognized QR payload.", "error");
+  };
 
   return (
     <div className="space-y-3">
@@ -169,6 +195,12 @@ export function DecryptPanel() {
           }}
           className="mt-2 block w-full text-[9px] text-slate-400 file:mr-2 file:rounded-md file:border-0 file:bg-cyan-400/15 file:px-2 file:py-1 file:text-[9px] file:text-cyan-200"
         />
+        <div className="mt-2">
+          <QrScanner
+            onValue={handleQrValue}
+            label="Scan token or shard QR"
+          />
+        </div>
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           <Button
             size="sm"

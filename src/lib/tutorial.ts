@@ -130,6 +130,19 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     tab: "decrypt",
   },
   {
+    id: "custody-kit",
+    sinceVersion: "1.11.0",
+    title: "Paper custody, scanning, and provenance",
+    body: "Token share cards, QR scanning, Ed25519 provenance, and block-based shards turn the vault into a custody kit rather than a single-file app.",
+    bullets: [
+      "Print one QR card per token share and store cards separately.",
+      "Scan share QR images or use the camera where BarcodeDetector is supported.",
+      "Sign the shape and package hash with a device or project Ed25519 key.",
+      "Large packages use block-based shards and OPFS when available.",
+    ],
+    tab: "token",
+  },
+  {
     id: "passphrase",
     sinceVersion: "1.10.0",
     title: "Passphrase-locked tokens",

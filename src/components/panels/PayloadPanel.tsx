@@ -153,6 +153,8 @@ export function PayloadPanel() {
   const updateTextDraft = useStudio((state) => state.updateTextDraft);
   const clearDrafts = useStudio((state) => state.clearDrafts);
   const sealPayload = useStudio((state) => state.sealPayload);
+  const sealProgress = useStudio((state) => state.sealProgress);
+  const cancelSeal = useStudio((state) => state.cancelSeal);
   const setTab = useStudio((state) => state.setTab);
   const notify = useStudio((state) => state.notify);
   const gridChoice = useStudio((state) => state.gridChoice);
@@ -163,6 +165,7 @@ export function PayloadPanel() {
   const [text, setText] = useState("");
   const [label, setLabel] = useState(matrix.label);
   const [passphrase, setPassphrase] = useState("");
+  const [passphraseConfirm, setPassphraseConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
@@ -194,6 +197,19 @@ export function PayloadPanel() {
   );
   const tierCapacity = capacityForGridSize(effectiveSize);
   const printWarning = packagePrintWarning(totalSize);
+  const passphraseStrength = (() => {
+    if (!passphrase) return { score: 0, label: "none" };
+    let score = 0;
+    if (passphrase.length >= 8) score += 1;
+    if (passphrase.length >= 12) score += 1;
+    if (/[a-z]/.test(passphrase) && /[A-Z]/.test(passphrase)) score += 1;
+    if (/\d/.test(passphrase)) score += 1;
+    if (/[^A-Za-z0-9]/.test(passphrase)) score += 1;
+    return {
+      score,
+      label: score >= 5 ? "strong" : score >= 3 ? "fair" : "weak",
+    };
+  })();
   const gridOptions: Array<{ value: GridSizeOption; label: string }> = [
     { value: "auto", label: "Auto" },
     ...GRID_SIZE_OPTIONS.map((size) => ({
@@ -203,9 +219,18 @@ export function PayloadPanel() {
   ];
 
   const handleSeal = async () => {
+    const normalizedPassphrase = passphrase.trim();
+    if (normalizedPassphrase && normalizedPassphrase.length < 8) {
+      setError("Token passphrase must be at least 8 characters.");
+      return;
+    }
+    if (normalizedPassphrase !== passphraseConfirm.trim()) {
+      setError("Token passphrase confirmation does not match.");
+      return;
+    }
     setBusy(true);
     setError("");
-    const result = await sealPayload(label, passphrase.trim() || undefined);
+    const result = await sealPayload(label, normalizedPassphrase || undefined);
     if (!result.ok) {
       setError(result.error ?? "Unable to seal this SCM.");
       setBusy(false);
@@ -213,6 +238,7 @@ export function PayloadPanel() {
     }
     setText("");
     setPassphrase("");
+    setPassphraseConfirm("");
     if (result.packageBlob) {
       await downloadBlob(
         result.packageBlob,
@@ -387,16 +413,42 @@ export function PayloadPanel() {
           />
           <Badge tone="cyan">{formatBytes(totalSize)}</Badge>
         </div>
-        <div className="mt-1.5">
+        <div className="mt-1.5 space-y-1.5">
           <TextInput
             type="password"
             value={passphrase}
             onChange={(event) => setPassphrase(event.target.value)}
-            placeholder="Optional token passphrase (8+ characters)"
+            placeholder="Optional token passphrase (strongly recommended)"
             autoComplete="new-password"
           />
-          <p className="mt-1 text-[9px] leading-relaxed text-slate-500">
-            If set, the private token is passphrase-locked. Share the passphrase
+          <TextInput
+            type="password"
+            value={passphraseConfirm}
+            onChange={(event) => setPassphraseConfirm(event.target.value)}
+            placeholder="Confirm token passphrase"
+            autoComplete="new-password"
+          />
+          {passphrase ? (
+            <div className="flex items-center gap-2">
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    passphraseStrength.score >= 5
+                      ? "w-full bg-emerald-400"
+                      : passphraseStrength.score >= 3
+                        ? "w-2/3 bg-amber-400"
+                        : "w-1/3 bg-rose-400"
+                  }`}
+                />
+              </div>
+              <span className="font-mono text-[8px] uppercase tracking-wider text-slate-500">
+                {passphraseStrength.label}
+              </span>
+            </div>
+          ) : null}
+          <p className="text-[9px] leading-relaxed text-slate-500">
+            Strongly recommended. If set, the private token is passphrase-locked
+            and there is no recovery if the passphrase is forgotten. Share it
             separately from the token and package.
           </p>
         </div>
@@ -613,6 +665,40 @@ export function PayloadPanel() {
           <p className="mt-2 rounded-md border border-rose-400/25 bg-rose-400/10 p-2 text-[10px] text-rose-200">
             {error}
           </p>
+        ) : null}
+
+        {sealProgress ? (
+          <div className="mt-2 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.05] p-2">
+            <div className="flex items-center justify-between gap-2 text-[9px] text-cyan-200">
+              <span className="truncate">{sealProgress.phase}</span>
+              <span className="font-mono">
+                {sealProgress.done} / {sealProgress.total}
+              </span>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 transition-all"
+                style={{
+                  width: `${
+                    sealProgress.total > 0
+                      ? Math.min(
+                          100,
+                          (sealProgress.done / sealProgress.total) * 100,
+                        )
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="mt-1.5 w-full"
+              onClick={cancelSeal}
+            >
+              Cancel sealing
+            </Button>
+          </div>
         ) : null}
 
         <Button

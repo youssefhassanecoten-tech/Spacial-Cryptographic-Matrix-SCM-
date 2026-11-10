@@ -117,7 +117,7 @@ npm.cmd run preview
 npm.cmd run dist:win
 ```
 
-Outputs: `release-electron/SCM-Studio-Setup-1.10.0.exe`, `release-electron/SCM-Studio-Portable-1.10.0.exe`, `latest.yml`, and the blockmap.
+Outputs: `release-electron/SCM-Studio-Setup-1.11.0.exe`, `release-electron/SCM-Studio-Portable-1.11.0.exe`, `latest.yml`, and the blockmap.
 
 Local copies live in `release/`. The NSIS installer supports automatic minor updates through `electron-updater`. The portable executable is unsigned, so Windows SmartScreen may warn on first launch, and portable builds do not self-update. The app loads through a secure `scm://` protocol with Web Crypto enabled.
 
@@ -197,6 +197,13 @@ node scripts/scm-local-cipher.mjs decrypt output.scmexp restored.bin
 ```
 
 It uses a keyed 8-bit S-box, a 2×4×4 spatial permutation, a 16-round Feistel network, HKDF round keys, scrypt passphrase derivation, CTR mode, and an HMAC-SHA256 tag. It is intended only to make local files unreadable without the passphrase. Do not use it for valuable secrets until it has independent cryptanalysis.
+
+## Security documentation
+
+- [Format specification](docs/SCM-SPEC.md)
+- [Threat model](docs/THREAT-MODEL.md)
+- [Test vectors](docs/TEST-VECTORS.md)
+- [Audit readiness](docs/AUDIT-READINESS.md)
 
 ## License
 

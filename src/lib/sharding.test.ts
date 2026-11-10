@@ -6,6 +6,7 @@ import {
 } from "./crypto";
 import { buildMerkleTree, merkleProof, toHex, verifyMerkleProof } from "./merkle";
 import {
+  buildLargeShardPackageFiles,
   buildShardPackageFiles,
   combineSecret,
   erasureDecode,
@@ -119,5 +120,32 @@ describe("Token share integrity", () => {
     expect(() =>
       recoverTokenFromShares([tampered, shares[1], shares[2]]),
     ).toThrow(/checksum/);
+  });
+});
+
+describe("Block-based v4 shards", () => {
+  it("round-trips a block-coded package from k shards", async () => {
+    const bytes = new Uint8Array(200 * 1024);
+    let state = 0xabcdef01;
+    for (let index = 0; index < bytes.length; index += 1) {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      bytes[index] = state & 0xff;
+    }
+    const files = await buildLargeShardPackageFiles(
+      new Blob([bytes], { type: "application/x-scm-package" }),
+      3,
+      5,
+      { blockSize: 64 * 1024, forceMemory: true },
+    );
+    expect(files).toHaveLength(5);
+    const recovered = await recoverPackageFromShardFiles([
+      files[0],
+      files[2],
+      files[4],
+    ]);
+    const restored = new Uint8Array(await recovered.arrayBuffer());
+    expect(await sha256Hex(restored)).toBe(await sha256Hex(bytes));
   });
 });
