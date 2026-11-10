@@ -1,11 +1,11 @@
 {
-  "version": "1.4.1",
-  "notes": "Surface-mapped glyphs across all six face directions, distinct shell and hex-prism silhouettes, glyph complexity that evolves with lattice fill, and gzip compression for .scm packages before encryption.",
-  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.4.1",
+  "version": "1.5.0",
+  "notes": "Lattice cap raised to 33³ with an 8 GB payload limit. Large uploads now stay lazy, compress per file, and encrypt in authenticated 4 MB chunks so GB-scale files no longer need to fit in memory.",
+  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.5.0",
   "downloads": {
     "web": "https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/",
-    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.4.1/SCM-Studio-1.4.1.apk",
-    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.4.1/SCM-Studio-Setup-1.4.1.exe",
-    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.4.1"
+    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.5.0/SCM-Studio-1.5.0.apk",
+    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.5.0/SCM-Studio-Setup-1.5.0.exe",
+    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.5.0"
   }
 }
