@@ -179,4 +179,11 @@ npm.cmd run build
 
 ## License
 
-MIT
+SCM Studio is proprietary, source-available software. It is **not** open source.
+
+No one may modify, redistribute, sell, sublicense, or create derivative or substantially similar works from SCM Studio without prior written permission. Personal, non-commercial use of official unmodified builds is permitted.
+
+- English license: [LICENSE](LICENSE)
+- Russian translation: [LICENSE.ru](LICENSE.ru)
+
+The English version controls. For permission requests, contact the copyright holder through the official repository.

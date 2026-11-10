@@ -1,6 +1,7 @@
 {
   "name": "scm-studio",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "version": "1.4.1",
   "description": "Local-first 3D cryptographic matrix studio, sealed payload vault, and guest viewer",
   "author": "Youssef Hassan",
