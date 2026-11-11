@@ -52,7 +52,7 @@ export function CanvasOverlay() {
         </div>
       ) : null}
       <div className="flex items-start justify-between gap-2">
-        <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+        <div className="pointer-events-auto hidden flex-wrap items-center gap-1.5 sm:flex">
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#050910]/75 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-slate-300 backdrop-blur">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
             live viewport
@@ -63,12 +63,12 @@ export function CanvasOverlay() {
           <span className="rounded-lg border border-white/10 bg-[#050910]/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-slate-400 backdrop-blur">
             active <span className="text-cyan-300">{matrix.activeCount}</span>
           </span>
-          <span className="rounded-lg border border-white/10 bg-[#050910]/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-slate-400 backdrop-blur">
+          <span className="hidden rounded-lg border border-white/10 bg-[#050910]/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-slate-400 backdrop-blur sm:inline-block">
             {GEOMETRY_LABEL[design.geometry]} · {MATERIAL_LABEL[design.material]}
           </span>
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-1 rounded-xl border border-white/10 bg-[#050910]/75 p-1 backdrop-blur">
+        <div className="pointer-events-auto ml-auto flex items-center gap-1 rounded-xl border border-white/10 bg-[#050910]/75 p-1 backdrop-blur">
           <IconButton
             label="Contrast guard"
             active={design.contrastGuard}
@@ -108,7 +108,7 @@ export function CanvasOverlay() {
       </div>
 
       <div className="flex items-end justify-between gap-3">
-        <div className="pointer-events-none">
+        <div className="pointer-events-none hidden sm:block">
           {design.contrastGuard ? (
             <div className="rounded-lg border border-amber-400/20 bg-[#0b0803]/80 p-2 backdrop-blur">
               <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-amber-200">

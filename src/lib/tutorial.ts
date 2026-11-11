@@ -130,6 +130,13 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     tab: "decrypt",
   },
   {
+    id: "mobile-layout",
+    sinceVersion: "1.11.1",
+    title: "Mobile layout refinement",
+    body: "On phones the viewport is cleaner, all seven tabs fit in one row, and the control deck sits in a rounded sheet. Notifications move to the bottom so they no longer cover the viewport controls.",
+    tab: "design",
+  },
+  {
     id: "custody-kit",
     sinceVersion: "1.11.0",
     title: "Paper custody, scanning, and provenance",

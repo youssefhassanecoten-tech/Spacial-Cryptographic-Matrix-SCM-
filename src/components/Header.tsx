@@ -103,6 +103,7 @@ export function Header() {
           <>
             <IconButton
               label="Open tutorial"
+              className="max-sm:hidden"
               onClick={() => useTutorial.getState().show(true)}
             >
               <BookOpen className="h-3.5 w-3.5" />

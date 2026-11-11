@@ -66,19 +66,19 @@ export function StudioPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-white/[0.06] px-3 py-3">
+      <div className="border-b border-white/[0.06] px-3 py-2.5 sm:py-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-400">
+              <span className="hidden text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-400 sm:inline">
                 Studio Control Deck
               </span>
             </div>
             <h2 className="mt-1 truncate text-sm font-semibold text-slate-100">
               {matrix.label}
             </h2>
-            <p className="mt-0.5 truncate font-mono text-[9px] text-slate-500">
-              {matrix.id} · {matrix.activeCount}/{matrix.voxelCount} active · {enabledLayers} layers
+            <p className="mt-0.5 hidden truncate font-mono text-[9px] text-slate-500 sm:block">
+              {matrix.id} A� {matrix.activeCount}/{matrix.voxelCount} active A� {enabledLayers} layers
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">
@@ -113,7 +113,7 @@ export function StudioPanel() {
                 key={tab.id}
                 type="button"
                 onClick={() => setTab(tab.id)}
-                className={`flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[9px] font-medium transition-all ${
+                className={`flex min-w-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-2 text-[8px] font-medium transition-all sm:text-[9px] lg:py-1.5 ${
                   active
                     ? "bg-cyan-400/12 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.28)]"
                     : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-300"
@@ -133,7 +133,7 @@ export function StudioPanel() {
         <TabContent tab={activeTab} />
       </div>
 
-      <div className="border-t border-white/[0.06] px-3 py-1.5">
+      <div className="hidden border-t border-white/[0.06] px-3 py-1.5 sm:block">
         <div className="flex items-center justify-between font-mono text-[8px] uppercase tracking-wider text-slate-600">
           <span>{design.geometry} · {design.material} · {design.gradient}</span>
           <span>v{APP_VERSION} · local-first</span>

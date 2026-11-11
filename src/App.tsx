@@ -93,7 +93,7 @@ export default function App() {
             className={
               sidebarCollapsed
                 ? "relative order-1 min-h-0 flex-1 overflow-hidden lg:order-2"
-                : "relative order-1 h-[42vh] shrink-0 overflow-hidden lg:order-2 lg:h-auto lg:flex-1 lg:shrink"
+                : "relative order-1 h-[38vh] min-h-[220px] shrink-0 overflow-hidden sm:h-[42vh] lg:order-2 lg:h-auto lg:flex-1 lg:shrink"
             }
           >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(14,116,144,0.14),transparent_58%)]" />
@@ -102,7 +102,7 @@ export default function App() {
             <PlaybackBar />
           </section>
           {!sidebarCollapsed ? (
-            <aside className="order-2 flex min-h-0 w-full flex-1 flex-col border-t border-white/[0.07] bg-[#070b14]/92 backdrop-blur-xl lg:order-1 lg:w-[382px] lg:flex-none lg:border-r lg:border-t-0">
+            <aside className="relative order-2 -mt-3 flex min-h-0 w-full flex-1 flex-col rounded-t-2xl border-t border-white/[0.07] bg-[#070b14]/95 shadow-[0_-18px_40px_rgba(0,0,0,0.38)] backdrop-blur-xl sm:mt-0 sm:rounded-none sm:shadow-none lg:order-1 lg:w-[382px] lg:flex-none lg:border-r lg:border-t-0">
               <StudioPanel />
             </aside>
           ) : null}

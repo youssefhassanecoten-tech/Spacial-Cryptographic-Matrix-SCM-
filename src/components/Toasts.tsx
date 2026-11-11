@@ -37,7 +37,7 @@ export function Toasts() {
 
   return (
     <div
-      className={`fixed right-3 top-16 z-50 flex max-w-sm animate-[scm-toast_180ms_ease-out] items-start gap-2 rounded-xl border ${tone.border} ${tone.background} px-3 py-2.5 shadow-2xl shadow-black/60 backdrop-blur-xl`}
+      className={`fixed bottom-4 right-3 top-auto z-50 flex max-w-sm animate-[scm-toast_180ms_ease-out] items-start gap-2 rounded-xl border ${tone.border} ${tone.background} px-3 py-2.5 shadow-2xl shadow-black/60 backdrop-blur-xl sm:bottom-auto sm:top-16`}
       role="status"
     >
       <span className={`mt-0.5 ${tone.color}`}>{tone.icon}</span>
