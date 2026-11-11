@@ -28,6 +28,7 @@ import {
   Route,
   ScanLine,
   ShieldAlert,
+  Smartphone,
   Sparkles,
   TriangleAlert,
   Waypoints,
@@ -103,6 +104,8 @@ export function DesignPanel() {
   const design = useStudio((state) => state.design);
   const matrix = useStudio((state) => state.matrix);
   const setDesign = useStudio((state) => state.setDesign);
+  const mobileLayout = useStudio((state) => state.mobileLayout);
+  const setMobileLayout = useStudio((state) => state.setMobileLayout);
   const centers = anchorPhysicalCenters(matrix);
   const printWarning = shapePrintWarning(design.shape);
 
@@ -415,6 +418,29 @@ export function DesignPanel() {
           Each marker is a content-derived maze shard. The full payload stays in the
           encrypted token and .scm package; the face layer adds a distributed visual
           data surface.
+        </p>
+      </PanelSection>
+
+      <PanelSection
+        icon={<Smartphone className="h-3.5 w-3.5" />}
+        title="Mobile Layout"
+        hint="Choose how the live preview and controls share space on a phone. Desktop keeps the split layout."
+        action={<Badge tone="cyan">phone</Badge>}
+      >
+        <Segmented
+          value={mobileLayout}
+          onChange={(layout) => setMobileLayout(layout)}
+          options={[
+            { value: "split", label: "Split" },
+            { value: "drawer", label: "Drawer" },
+            { value: "tabs", label: "Settings" },
+            { value: "minimap", label: "Mini-map" },
+          ]}
+          columns={2}
+        />
+        <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+          Mini-map previews can be dragged by their top handle. The choice is saved on
+          this device.
         </p>
       </PanelSection>
 

@@ -130,6 +130,18 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     tab: "decrypt",
   },
   {
+    id: "mobile-layout-choice",
+    sinceVersion: "1.11.2",
+    title: "Choose your mobile layout",
+    body: "Design settings now let you choose Split, Drawer, Settings-first, or Mini-map. Mini-map can be dragged by its top handle and remembers its position.",
+    bullets: [
+      "Drawer keeps a compact preview and expands on demand.",
+      "Settings-first gives the control deck the full screen.",
+      "Mini-map floats and can be moved anywhere.",
+    ],
+    tab: "design",
+  },
+  {
     id: "mobile-layout",
     sinceVersion: "1.11.1",
     title: "Mobile layout refinement",

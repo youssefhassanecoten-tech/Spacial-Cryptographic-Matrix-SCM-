@@ -6,6 +6,7 @@ import type {
   ExplosionType,
   FillMode,
   GridSizeOption,
+  MobileLayout,
   PayloadKind,
   RevealResult,
   SCMShapePayload,
@@ -44,6 +45,24 @@ import {
 } from "../lib/vault";
 
 const initialMatrix = createBlankMatrix();
+const MOBILE_LAYOUT_KEY = "scm-mobile-layout";
+
+function loadMobileLayout(): MobileLayout {
+  if (typeof window === "undefined") {
+    return "split";
+  }
+  try {
+    const value = window.localStorage.getItem(MOBILE_LAYOUT_KEY);
+    return value === "split" ||
+      value === "drawer" ||
+      value === "tabs" ||
+      value === "minimap"
+      ? value
+      : "split";
+  } catch {
+    return "split";
+  }
+}
 
 export const DEFAULT_DESIGN: DesignState = {
   geometry: "classic",
@@ -134,6 +153,7 @@ export interface StudioState {
   gridChoice: GridSizeOption;
   fillChoice: FillMode;
   revealStyle: ExplosionType;
+  mobileLayout: MobileLayout;
   sidebarCollapsed: boolean;
   toast: ToastState | null;
   drafts: PayloadDraftItem[];
@@ -163,6 +183,7 @@ export interface StudioState {
   setGridChoice: (choice: GridSizeOption) => void;
   setFillChoice: (choice: FillMode) => void;
   setRevealStyle: (style: ExplosionType) => void;
+  setMobileLayout: (layout: MobileLayout) => void;
   refreshPreview: () => void;
   toggleSidebar: () => void;
   notify: (message: string, tone?: ToastTone) => void;
@@ -270,6 +291,7 @@ export const useStudio = create<StudioState>((set, get) => ({
   gridChoice: "auto",
   fillChoice: "full",
   revealStyle: "radial",
+  mobileLayout: loadMobileLayout(),
   sidebarCollapsed: false,
   toast: null,
   drafts: [],
@@ -363,6 +385,16 @@ export const useStudio = create<StudioState>((set, get) => ({
   setFillChoice: (fillChoice) => set({ fillChoice }),
 
   setRevealStyle: (revealStyle) => set({ revealStyle }),
+
+  setMobileLayout: (mobileLayout) => {
+    try {
+      window.localStorage.setItem(MOBILE_LAYOUT_KEY, mobileLayout);
+    } catch {
+      set({ mobileLayout });
+      return;
+    }
+    set({ mobileLayout });
+  },
 
   refreshPreview: () => {
     const state = get();

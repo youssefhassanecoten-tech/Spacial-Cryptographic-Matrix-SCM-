@@ -1,11 +1,11 @@
 {
-  "version": "1.11.1",
-  "notes": "Mobile layout refinement: a cleaner viewport, compact control deck, all seven tabs visible, a rounded control sheet, and bottom-anchored mobile toasts.",
-  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.11.1",
+  "version": "1.11.2",
+  "notes": "Mobile layout preference in Design settings: Split, Drawer, Settings-first, or draggable Mini-map. Mini-map position and layout choice are saved on the device.",
+  "releaseUrl": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.11.2",
   "downloads": {
     "web": "https://youssefhassanecoten-tech.github.io/Spacial-Cryptographic-Matrix-SCM-/",
-    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.11.1/SCM-Studio-1.11.1.apk",
-    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.11.1/SCM-Studio-Setup-1.11.1.exe",
-    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.11.1"
+    "android": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.11.2/SCM-Studio-1.11.2.apk",
+    "desktop": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/download/v1.11.2/SCM-Studio-Setup-1.11.2.exe",
+    "ios": "https://github.com/youssefhassanecoten-tech/Spacial-Cryptographic-Matrix-SCM-/releases/tag/v1.11.2"
   }
 }

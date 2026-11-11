@@ -23,6 +23,7 @@ export interface RevealDirective {
 
 export type Vec3 = [number, number, number];
 export type FillMode = "full" | "data";
+export type MobileLayout = "split" | "drawer" | "tabs" | "minimap";
 export type GridSizeOption =
   | "auto"
   | "3"
